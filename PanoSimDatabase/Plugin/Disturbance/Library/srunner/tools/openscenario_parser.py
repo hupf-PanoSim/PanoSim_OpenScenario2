@@ -19,9 +19,9 @@ import math
 import operator
 
 import py_trees
-import carla
 
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+from srunner.scenariomanager.data_provider import PanoSimDataProvider, PanoSimTrafficLightState, PanoSimWeather
+from srunner.scenariomanager.data_provider import PanoSimLocation, PanoSimTransform, PanoSimRotation, PanoSimVector3D
 from srunner.scenariomanager.weather_sim import Weather
 from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (TrafficLightStateSetter,
                                                                       ActorTransformSetterToOSCPosition,
@@ -130,7 +130,7 @@ class ParameterRef:
         if self.is_literal():
             value = self.reference_text
         elif self.is_parameter():
-            value = CarlaDataProvider.get_osc_global_param_value(self.reference_text)
+            value = PanoSimDataProvider.get_osc_global_param_value(self.reference_text)
             if value is None:
                 raise Exception("Parameter '{}' is not defined".format(self.reference_text[1:]))
         else:
@@ -244,10 +244,10 @@ class OpenScenarioParser(object):
     }
 
     tl_states = {
-        "GREEN": carla.TrafficLightState.Green,
-        "YELLOW": carla.TrafficLightState.Yellow,
-        "RED": carla.TrafficLightState.Red,
-        "OFF": carla.TrafficLightState.Off,
+        "GREEN": PanoSimTrafficLightState.Green,
+        "YELLOW": PanoSimTrafficLightState.Yellow,
+        "RED": PanoSimTrafficLightState.Red,
+        "OFF": PanoSimTrafficLightState.Off,
     }
 
     osc_traffic_signal_phase = {}
@@ -259,14 +259,14 @@ class OpenScenarioParser(object):
     @staticmethod
     def get_traffic_light_from_osc_name(name):
         """
-        Returns a carla.TrafficLight instance that matches the name given
+        Returns a PanoSimTrafficLight instance that matches the name given
         """
         traffic_light = None
 
         # Given by id
         if name.startswith("id="):
             tl_id = int(name[3:])
-            for carla_tl in CarlaDataProvider.get_all_actors().filter('traffic.traffic_light'):
+            for carla_tl in PanoSimDataProvider.get_all_actors().filter('traffic.traffic_light'):
                 if carla_tl.id == tl_id:
                     traffic_light = carla_tl
                     break
@@ -274,9 +274,9 @@ class OpenScenarioParser(object):
         elif name.startswith("pos="):
             tl_pos = name[4:]
             pos = tl_pos.split(",")
-            for carla_tl in CCarlaDataProvider.get_all_actors().filter('traffic.traffic_light'):
+            for carla_tl in PanoSimDataProvider.get_all_actors().filter('traffic.traffic_light'):
                 carla_tl_location = carla_tl.get_transform().location
-                distance = carla_tl_location.distance(carla.Location(float(pos[0]),
+                distance = carla_tl_location.distance(PanoSimLocation(float(pos[0]),
                                                                      float(pos[1]),
                                                                      carla_tl_location.z))
                 if distance < 2.0:
@@ -352,7 +352,7 @@ class OpenScenarioParser(object):
             parameter_dict (Dictionary): Input for global_osc_parameter
         """
         OpenScenarioParser.global_osc_parameters = parameter_dict
-        CarlaDataProvider.update_osc_global_params(parameter_dict)
+        PanoSimDataProvider.update_osc_global_params(parameter_dict)
 
     @staticmethod
     def get_catalog_entry(catalogs, catalog_reference):
@@ -467,7 +467,7 @@ class OpenScenarioParser(object):
             node = xml_tree.findall('.//EnvironmentAction')[0]
             set_environment = next(node.iter("EnvironmentAction"))
         else:
-            return Weather(carla.WeatherParameters())
+            return Weather(PanoSimWeather())
 
         if sum(1 for _ in set_environment.iter("Weather")) != 0:
             environment = set_environment.find("Environment")
@@ -478,7 +478,7 @@ class OpenScenarioParser(object):
         weather = environment.find("Weather")
         sun = weather.find("Sun")
 
-        carla_weather = carla.WeatherParameters()
+        carla_weather = PanoSimWeather()
         carla_weather.sun_azimuth_angle = math.degrees(float(sun.attrib.get('azimuth', 0)))
         carla_weather.sun_altitude_angle = math.degrees(float(sun.attrib.get('elevation', 0)))
         carla_weather.cloudiness = 100 - float(sun.attrib.get('intensity', 0)) * 100
@@ -644,7 +644,7 @@ class OpenScenarioParser(object):
             if not OpenScenarioParser.use_carla_coordinate_system:
                 y = y * (-1.0)
                 yaw = yaw * (-1.0)
-            return carla.Transform(carla.Location(x=x, y=y, z=z), carla.Rotation(yaw=yaw, pitch=pitch, roll=roll))
+            return PanoSimTransform(PanoSimLocation(x=x, y=y, z=z), PanoSimRotation(yaw=yaw, pitch=pitch, roll=roll))
 
         elif ((position.find('RelativeWorldPosition') is not None) or
               (position.find('RelativeObjectPosition') is not None) or
@@ -671,7 +671,7 @@ class OpenScenarioParser(object):
                         obj_actor = actor
                         actor_transform = actor.transform
             else:
-                for actor in CarlaDataProvider.get_all_actors():
+                for actor in PanoSimDataProvider.get_all_actors():
                     if 'role_name' in actor.attributes and actor.attributes['role_name'] == obj:
                         obj_actor = actor
                         actor_transform = obj_actor.get_transform()
@@ -723,20 +723,19 @@ class OpenScenarioParser(object):
                 y = actor_transform.location.y + dy
                 z = actor_transform.location.z + dz
 
-                transform = carla.Transform(carla.Location(x=x, y=y, z=z),
-                                            carla.Rotation(yaw=yaw, pitch=pitch, roll=roll))
+                transform = PanoSimTransform(PanoSimLocation(x=x, y=y, z=z), PanoSimRotation(yaw=yaw, pitch=pitch, roll=roll))
 
             elif position.find('RelativeLanePosition') is not None:
                 dlane = float(ParameterRef(rel_pos.attrib.get('dLane')))
                 ds = float(ParameterRef(rel_pos.attrib.get('ds')))
                 offset = float(ParameterRef(rel_pos.attrib.get('offset', 0.0)))
 
-                carla_map = CarlaDataProvider.get_map()
+                carla_map = PanoSimDataProvider.get_map()
                 relative_waypoint = carla_map.get_waypoint(actor_transform.location)
 
                 road_id, ref_lane_id, ref_s = relative_waypoint.road_id, relative_waypoint.lane_id, relative_waypoint.s
                 target_lane_id = int(ref_lane_id + dlane)
-                waypoint = CarlaDataProvider.get_map().get_waypoint_xodr(road_id, target_lane_id, ref_s)
+                waypoint = PanoSimDataProvider.get_map().get_waypoint_xodr(road_id, target_lane_id, ref_s)
                 if waypoint is not None:
                     if ds < 0:
                         ds = (-1.0) * ds
@@ -770,12 +769,12 @@ class OpenScenarioParser(object):
                 dt = float(ParameterRef(rel_pos.attrib.get('dt', 0.0)))
                 troad = get_troad_from_transform
 
-                carla_map = CarlaDataProvider.get_map()
+                carla_map = PanoSimDataProvider.get_map()
                 relative_waypoint = carla_map.get_waypoint(actor_transform.location)
 
                 road_id, ref_lane_id, ref_s = relative_waypoint.road_id, relative_waypoint.lane_id, relative_waypoint.s
                 target_t, target_s = troad(relative_waypoint.transform) - troad(actor_transform) + dt, ref_s + ds
-                waypoint = CarlaDataProvider.get_map().get_waypoint_xodr(road_id, ref_lane_id, target_s)
+                waypoint = PanoSimDataProvider.get_map().get_waypoint_xodr(road_id, ref_lane_id, target_s)
                 if waypoint is None:
                     raise AttributeError("RelativeRoadPosition 'roadId={} with s={} and t={}' does not exist".format(
                         road_id, target_s, target_t))
@@ -794,7 +793,7 @@ class OpenScenarioParser(object):
             t = float(ParameterRef(road_pos.attrib.get('t', 0)))
             s = float(ParameterRef(road_pos.attrib.get('s', 0)))
 
-            waypoint = CarlaDataProvider.get_map().get_waypoint_xodr(road_id, 0, s)
+            waypoint = PanoSimDataProvider.get_map().get_waypoint_xodr(road_id, 0, s)
             if waypoint is None:
                 raise AttributeError("RoadPosition 'roadId={} with s={} and t={}' does not exist".format(road_id, s, t))
 
@@ -825,10 +824,9 @@ class OpenScenarioParser(object):
             lane_id = int(ParameterRef(lane_pos.attrib.get('laneId', 0)))
             offset = float(ParameterRef(lane_pos.attrib.get('offset', 0)))
             s = float(ParameterRef(lane_pos.attrib.get('s', 0)))
-            waypoint = CarlaDataProvider.get_map().get_waypoint_xodr(road_id, lane_id, s)
+            waypoint = PanoSimDataProvider.get_map().get_waypoint_xodr(road_id, lane_id, s)
             if waypoint is None:
-                raise AttributeError("LanePosition 'roadId={}, laneId={}, s={}, offset={}' does not exist".format(
-                    road_id, lane_id, s, offset))
+                raise AttributeError("LanePosition 'roadId={}, laneId={}, s={}, offset={}' does not exist".format(road_id, lane_id, s, offset))
 
             transform = waypoint.transform
             if lane_pos.find('Orientation') is not None:
@@ -846,7 +844,7 @@ class OpenScenarioParser(object):
 
             if offset != 0:
                 forward_vector = transform.rotation.get_forward_vector()
-                orthogonal_vector = carla.Vector3D(x=-forward_vector.y, y=forward_vector.x, z=forward_vector.z)
+                orthogonal_vector = PanoSimVector3D(x=-forward_vector.y, y=forward_vector.x, z=forward_vector.z)
                 transform.location.x = transform.location.x + offset * orthogonal_vector.x
                 transform.location.y = transform.location.y + offset * orthogonal_vector.y
 

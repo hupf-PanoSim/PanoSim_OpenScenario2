@@ -9,7 +9,7 @@
 This module provides the key configuration parameters for an XML-based scenario
 """
 
-import carla
+from srunner.scenariomanager.data_provider import PanoSimWeather
 
 
 class ActorConfigurationData(object):
@@ -104,7 +104,7 @@ class ScenarioConfiguration(object):
         self.type = None
         self.route = None
         self.agent = None
-        self.weather = carla.WeatherParameters(sun_altitude_angle=70, cloudiness=50)
+        self.weather = PanoSimWeather(sun_altitude_angle=70, cloudiness=50)
         self.friction = None
         self.subtype = None
         self.route_var_name = None

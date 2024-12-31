@@ -14,7 +14,7 @@ import datetime
 import operator
 import py_trees
 
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+from srunner.scenariomanager.data_provider import PanoSimDataProvider
 
 
 class GameTime(object):
@@ -213,7 +213,7 @@ class RouteTimeoutBehavior(py_trees.behaviour.Behaviour):
         """
         new_status = py_trees.common.Status.RUNNING
 
-        ego_location = CarlaDataProvider.get_location(self._ego_vehicle)
+        ego_location = PanoSimDataProvider.get_location(self._ego_vehicle)
         if ego_location is None:
             return new_status
 

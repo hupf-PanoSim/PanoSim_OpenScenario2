@@ -1,8 +1,7 @@
-import carla
-from carla import LandmarkType, Waypoint
+# from carla import LandmarkType, Waypoint
 
 from srunner.osc2_dm.physical_types import Physical
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+from srunner.scenariomanager.data_provider import PanoSimDataProvider, PanoSimWaypoint
 from srunner.tools.osc2_helper import OSC2Helper
 
 
@@ -26,7 +25,7 @@ class OverJunctionCheck:
 
         self.start_wps_in_junction = []
 
-    def _check_distance_before(self, wp: Waypoint) -> bool:
+    def _check_distance_before(self, wp: PanoSimWaypoint) -> bool:
         """
         Input: wp, the wp being checked
         Output: Whether wp is at distance_before before the intersection
@@ -63,7 +62,7 @@ class OverJunctionCheck:
 
         return False
 
-    def _check_distance_in(self, wp: Waypoint) -> bool:
+    def _check_distance_in(self, wp: PanoSimWaypoint) -> bool:
         """
         Input: wp, the first waypoint in the intersection
         Output: the distance in the intersection is equal to the set distance
@@ -104,7 +103,7 @@ class OverJunctionCheck:
     def check_distance_in(self) -> bool:
         return any(map(self._check_distance_in, self.start_wps_in_junction))
 
-    def _check_distance_after(self, wp: Waypoint) -> bool:
+    def _check_distance_after(self, wp: PanoSimWaypoint) -> bool:
         """
         Input: wp, the first waypoint after the intersection
         Return: The distance after the intersection is equal to the set distance
@@ -154,7 +153,7 @@ class OverJunctionCheck:
 
         return self.direction.is_in_range(angle)
 
-    def check(self, wp: Waypoint) -> bool:
+    def check(self, wp: PanoSimWaypoint) -> bool:
         self.line1_start = wp
         return (
             self._check_distance_before(self.line1_start)
@@ -168,13 +167,13 @@ class OverLanesDecreaseCheck:
     def __init__(self, sp_more_lanes_path_length: Physical) -> None:
         self.distance = sp_more_lanes_path_length
 
-    def check(self, wp: Waypoint) -> bool:
+    def check(self, wp: PanoSimWaypoint) -> bool:
         """
         Input: wp, path points to be checked
         Output: Whether the number of lanes decreases within distance ahead of wp.
         """
         distance = int(self.distance.gen_single_value())
-        lane_cnt = CarlaDataProvider.get_road_lane_cnt(wp)
+        lane_cnt = PanoSimDataProvider.get_road_lane_cnt(wp)
 
         for dis in range(1, distance + 1):
             next_wps = wp.next(dis)
@@ -183,7 +182,7 @@ class OverLanesDecreaseCheck:
                 next_wp = next_wps[0]
                 if next_wp.is_junction:
                     return False
-                next_lanes_cnt = CarlaDataProvider.get_road_lane_cnt(next_wp)
+                next_lanes_cnt = PanoSimDataProvider.get_road_lane_cnt(next_wp)
                 if next_lanes_cnt < lane_cnt:
                     return True
             else:
@@ -192,13 +191,13 @@ class OverLanesDecreaseCheck:
         return False
 
 
-class PathTrafficSign(CarlaDataProvider):
+class PathTrafficSign(PanoSimDataProvider):
     _length = 100.0
     distance_step = 2.0
     wps = []
 
     @staticmethod
-    def path_has_traffic_sign(waypoint: Waypoint, sign_type: str, length=None) -> bool:
+    def path_has_traffic_sign(waypoint: PanoSimWaypoint, sign_type: str, length=None) -> bool:
         if length:
             PathTrafficSign._length = length
         temp_list = waypoint.next_until_lane_end(PathTrafficSign.distance_step)
@@ -214,7 +213,7 @@ class PathTrafficSign(CarlaDataProvider):
 
     @staticmethod
     def path_has_no_traffic_signs(
-        waypoint: Waypoint, sign_type: list, length=None
+        waypoint: PanoSimWaypoint, sign_type: list, length=None
     ) -> bool:
         lane_length_list = []
         if length:
@@ -238,7 +237,7 @@ class PathDiffDest(object):
         self.path_length = 30.0
         self.current_length = float(0)
 
-    def get_diff_dest_point(self, wp: Waypoint, length: float) -> bool:
+    def get_diff_dest_point(self, wp: PanoSimWaypoint, length: float) -> bool:
         if length and length > self.path_length:
             self.path_length = length
         # Stay away from the road reference line
@@ -291,7 +290,7 @@ class PathDiffOrigin(object):
 
         # Find all generative points on the map except the one you just made.
         # Each point generates a path of the specified length
-        _map = CarlaDataProvider.get_map(CarlaDataProvider.world)
+        _map = PanoSimDataProvider.get_map(PanoSimDataProvider.world)
         wps = _map.get_spawn_points()
         all_path = []
         path_wps = []
@@ -323,7 +322,7 @@ class PathExplicit(object):
         self.tolerance = float(tolerance)
 
     def gen_path_by_point(self, wp):
-        carla_map = CarlaDataProvider.get_map()
+        carla_map = PanoSimDataProvider.get_map()
         start_road_id, start_lane_id, start_s = (
             self.start_point_parm[0],
             self.start_point_parm[1],
@@ -401,7 +400,7 @@ class PathCurve:
         self.max_radius = max_radius
         self.side = side
 
-    def check(self, wp: Waypoint) -> bool:
+    def check(self, wp: PanoSimWaypoint) -> bool:
         """
         Input: wp, the path point to be checked
         Output: Whether the curvature radius of the path where wp is located meets the requirements

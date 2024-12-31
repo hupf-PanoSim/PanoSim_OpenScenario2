@@ -12,7 +12,6 @@ behavior of the sun.
 """
 
 import py_trees
-import carla
 
 from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
 

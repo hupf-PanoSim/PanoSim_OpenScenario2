@@ -11,11 +11,9 @@ Scenario spawning elements to make the town dynamic and interesting
 from collections import OrderedDict
 import py_trees
 
-import carla
+# from agents.navigation.local_planner import RoadOption
 
-from agents.navigation.local_planner import RoadOption
-
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+from srunner.scenariomanager.data_provider import PanoSimDataProvider, PanoSimColor
 from srunner.scenariomanager.scenarioatomics.atomic_behaviors import AtomicBehavior
 from srunner.tools.scenario_helper import get_same_dir_lanes, get_opposite_dir_lanes
 
@@ -60,12 +58,12 @@ DEBUG_MEDIUM = 'medium'
 DEBUG_LARGE = 'large'
 
 DEBUG_COLORS = {
-    DEBUG_ROAD: carla.Color(0, 0, 255),      # Blue
-    DEBUG_OPPOSITE: carla.Color(255, 0, 0),  # Red
-    DEBUG_JUNCTION: carla.Color(0, 0, 0),    # Black
-    DEBUG_ENTRY: carla.Color(255, 255, 0),   # Yellow
-    DEBUG_EXIT: carla.Color(0, 255, 255),    # Teal
-    DEBUG_CONNECT: carla.Color(0, 255, 0),   # Green
+    DEBUG_ROAD: PanoSimColor(0, 0, 255),      # Blue
+    DEBUG_OPPOSITE: PanoSimColor(255, 0, 0),  # Red
+    DEBUG_JUNCTION: PanoSimColor(0, 0, 0),    # Black
+    DEBUG_ENTRY: PanoSimColor(255, 255, 0),   # Yellow
+    DEBUG_EXIT: PanoSimColor(0, 255, 255),    # Teal
+    DEBUG_CONNECT: PanoSimColor(0, 255, 0),   # Green
 }
 
 DEBUG_TYPE = {

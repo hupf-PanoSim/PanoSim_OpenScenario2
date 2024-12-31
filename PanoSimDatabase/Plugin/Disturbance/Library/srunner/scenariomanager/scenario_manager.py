@@ -17,10 +17,10 @@ import time
 import py_trees
 
 from srunner.autoagents.agent_wrapper import AgentWrapper
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+from srunner.scenariomanager.data_provider import PanoSimDataProvider, Timestamp
 from srunner.scenariomanager.result_writer import ResultOutputProvider
 from srunner.scenariomanager.timer import GameTime
-from srunner.scenariomanager.watchdog import Watchdog
+# from srunner.scenariomanager.watchdog import Watchdog
 
 
 class ScenarioManager(object):
@@ -54,7 +54,7 @@ class ScenarioManager(object):
         self._debug_mode = debug_mode
         self._agent = None
         self._sync_mode = sync_mode
-        self._watchdog = None
+        # self._watchdog = None
         self._timeout = timeout
 
         self._running = False
@@ -81,9 +81,9 @@ class ScenarioManager(object):
         This function triggers a proper termination of a scenario
         """
 
-        if self._watchdog is not None:
-            self._watchdog.stop()
-            self._watchdog = None
+        # if self._watchdog is not None:
+        #     self._watchdog.stop()
+        #     self._watchdog = None
 
         if self.scenario is not None:
             self.scenario.terminate()
@@ -92,7 +92,7 @@ class ScenarioManager(object):
             self._agent.cleanup()
             self._agent = None
 
-        CarlaDataProvider.cleanup()
+        PanoSimDataProvider.cleanup()
 
     def load_scenario(self, scenario, agent=None):
         """
@@ -113,6 +113,29 @@ class ScenarioManager(object):
         if self._agent is not None:
             self._agent.setup_sensors(self.ego_vehicles[0], self._debug_mode)
 
+    def scenario_start(self):
+        print("ScenarioManager: Running scenario {}".format(self.scenario_tree.name))
+        self._running = True
+        self.start_system_time = time.time()
+        self.start_game_time = GameTime.get_time()
+        self.timestamp = Timestamp()
+        self.start_time = 0
+
+    def ModelOutput(self, userData):
+        self.timestamp.elapsed_seconds = (userData['time'] - self.start_time) / 1000
+        self.timestamp.frame += 1
+        if self.timestamp:
+            self._tick_scenario(self.timestamp, userData)
+
+    def ModelTerminate(self):
+        self.cleanup()
+        self.end_system_time = time.time()
+        end_game_time = GameTime.get_time()
+        self.scenario_duration_system = self.end_system_time - self.start_system_time
+        self.scenario_duration_game = end_game_time - self.start_game_time
+        if self.scenario_tree.status == py_trees.common.Status.FAILURE:
+            print("ScenarioManager: Terminated due to failure")
+
     def run_scenario(self):
         """
         Trigger the start of the scenario and wait for it to finish/fail
@@ -121,17 +144,25 @@ class ScenarioManager(object):
         self.start_system_time = time.time()
         start_game_time = GameTime.get_time()
 
-        self._watchdog = Watchdog(float(self._timeout))
-        self._watchdog.start()
+        # self._watchdog = Watchdog(float(self._timeout))
+        # self._watchdog.start()
         self._running = True
 
+        # while self._running:
+        #     timestamp = None
+        #     world = PanoSimDataProvider.get_world()
+        #     if world:
+        #         snapshot = world.get_snapshot()
+        #         if snapshot:
+        #             timestamp = snapshot.timestamp
+        #     if timestamp:
+        #         self._tick_scenario(timestamp)
+        timestamp = Timestamp()
+        start_time = time.time()
         while self._running:
-            timestamp = None
-            world = CarlaDataProvider.get_world()
-            if world:
-                snapshot = world.get_snapshot()
-                if snapshot:
-                    timestamp = snapshot.timestamp
+            timestamp.elapsed_seconds = time.time() - start_time
+            timestamp.frame += 1
+            # print('timestamp.frame:', timestamp.frame)
             if timestamp:
                 self._tick_scenario(timestamp)
 
@@ -140,14 +171,13 @@ class ScenarioManager(object):
         self.end_system_time = time.time()
         end_game_time = GameTime.get_time()
 
-        self.scenario_duration_system = self.end_system_time - \
-            self.start_system_time
+        self.scenario_duration_system = self.end_system_time - self.start_system_time
         self.scenario_duration_game = end_game_time - start_game_time
 
         if self.scenario_tree.status == py_trees.common.Status.FAILURE:
             print("ScenarioManager: Terminated due to failure")
 
-    def _tick_scenario(self, timestamp):
+    def _tick_scenario(self, timestamp, userData):
         """
         Run next tick of scenario and the agent.
         If running synchornously, it also handles the ticking of the world.
@@ -156,22 +186,32 @@ class ScenarioManager(object):
         if self._timestamp_last_run < timestamp.elapsed_seconds and self._running:
             self._timestamp_last_run = timestamp.elapsed_seconds
 
-            self._watchdog.update()
-
-            if self._debug_mode:
-                print("\n--------- Tick ---------\n")
-
-            # Update game time and actor information
             GameTime.on_carla_tick(timestamp)
-            CarlaDataProvider.on_carla_tick()
+
+            bus_trafffic = userData["bus_traffic"].getReader(userData["time"])
+            _, width = bus_trafffic.readHeader()
+            for index in range(width):
+                id, _, _, x, y, z, yaw, pitch, roll, speed = bus_trafffic.readBody(index)
+                if id in PanoSimDataProvider._actor_pool.keys():
+                    actor = PanoSimDataProvider._actor_pool[id]
+                    if actor.actor_category == 'bicycle' or actor.actor_category == 'pedestrian':
+                        actor.transform.location.x = x
+                        actor.transform.location.y = y
+                        actor.transform.location.z = z
+                        actor.transform.rotation.yaw = yaw
+                        actor.transform.rotation.pitch = pitch
+                        actor.transform.rotation.roll = roll
+                        actor.speed = speed
+                    break
+
+            PanoSimDataProvider.on_carla_tick()
 
             if self._agent is not None:
-                ego_action = self._agent()  # pylint: disable=not-callable
+                ego_action = self._agent()
 
             if self._agent is not None:
                 self.ego_vehicles[0].apply_control(ego_action)
 
-            # Tick scenario
             self.scenario_tree.tick_once()
 
             if self._debug_mode:
@@ -182,15 +222,15 @@ class ScenarioManager(object):
             if self.scenario_tree.status != py_trees.common.Status.RUNNING:
                 self._running = False
 
-        if self._sync_mode and self._running and self._watchdog.get_status():
-            CarlaDataProvider.get_world().tick()
+        if self._sync_mode and self._running:
+            PanoSimDataProvider.get_world().tick()
 
-    def get_running_status(self):
-        """
-        returns:
-           bool:  False if watchdog exception occured, True otherwise
-        """
-        return self._watchdog.get_status()
+    # def get_running_status(self):
+    #     """
+    #     returns:
+    #        bool:  False if watchdog exception occured, True otherwise
+    #     """
+    #     return self._watchdog.get_status()
 
     def stop_scenario(self):
         """

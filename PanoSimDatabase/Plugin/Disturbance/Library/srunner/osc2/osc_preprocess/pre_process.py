@@ -12,7 +12,7 @@ class Preprocess:
     def __init__(self, current_path):
         self.import_msg = import_msg
         # The path to the current file, converted to an absolute path
-        self.current_path = os.getcwd() + "/" + current_path
+        self.current_path = current_path
         # invocation stack
         self.stack = []
         # invocation record

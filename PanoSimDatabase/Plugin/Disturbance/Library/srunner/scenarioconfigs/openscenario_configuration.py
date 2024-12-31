@@ -16,12 +16,10 @@ import xml.etree.ElementTree as ET
 
 import xmlschema
 
-import carla
-
 # pylint: disable=line-too-long
 from srunner.scenarioconfigs.scenario_configuration import ActorConfigurationData, ScenarioConfiguration
 # pylint: enable=line-too-long
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider  # workaround
+from srunner.scenariomanager.data_provider import PanoSimDataProvider, PanoSimWeather, PanoSimTransform
 from srunner.tools.openscenario_parser import OpenScenarioParser, ParameterRef
 
 
@@ -48,7 +46,7 @@ class OpenScenarioConfiguration(ScenarioConfiguration):
         self.other_actors = []
         self.ego_vehicles = []
         self.trigger_points = []
-        self.weather = carla.WeatherParameters()
+        self.weather = PanoSimWeather()
 
         self.storyboard = self.xml_tree.find("Storyboard")
         self.stories = self.storyboard.findall("Story")
@@ -210,13 +208,13 @@ class OpenScenarioConfiguration(ScenarioConfiguration):
                     continue
                 world = self.client.get_world()
 
-            CarlaDataProvider.set_world(world)
-            if CarlaDataProvider.is_sync_mode():
+            PanoSimDataProvider.set_world(world)
+            if PanoSimDataProvider.is_sync_mode():
                 world.tick()
             else:
                 world.wait_for_tick()
         else:
-            CarlaDataProvider.set_world(world)
+            PanoSimDataProvider.set_world(world)
 
     def _set_parameters(self):
         """
@@ -352,7 +350,7 @@ class OpenScenarioConfiguration(ScenarioConfiguration):
                 should be defined before!
         """
 
-        actor_transform = carla.Transform()
+        actor_transform = PanoSimTransform()
 
         actor_found = False
 

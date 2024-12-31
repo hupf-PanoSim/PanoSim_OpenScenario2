@@ -17,9 +17,8 @@ import operator
 
 import ephem
 import py_trees
-import carla
 
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+from srunner.scenariomanager.data_provider import PanoSimDataProvider, PanoSimLocation, PanoSimWeather, PanoSimColor
 from srunner.scenariomanager.timer import GameTime
 
 
@@ -33,14 +32,14 @@ class Weather(object):
     library.
 
     Args:
-        carla_weather (carla.WeatherParameters): Initial weather settings.
+        carla_weather (PanoSimWeather): Initial weather settings.
         dtime (datetime): Initial date and time in UTC (required for animation only).
             Defaults to None.
         animation (bool): Flag to allow animating the sun position over time.
             Defaults to False.
 
     Attributes:
-        carla_weather (carla.WeatherParameters): Weather parameters for CARLA.
+        carla_weather (PanoSimWeather): Weather parameters for CARLA.
         animation (bool): Flag to allow animating the sun position over time.
         _sun (ephem.Sun): The sun as astronomic entity.
         _observer_location (ephem.Observer): Holds the geographical position (lat/lon/altitude)
@@ -57,7 +56,7 @@ class Weather(object):
 
         self._sun = ephem.Sun()  # pylint: disable=no-member
         self._observer_location = ephem.Observer()
-        geo_location = CarlaDataProvider.get_map().transform_to_geolocation(carla.Location(0, 0, 0))
+        geo_location = PanoSimDataProvider.get_map().transform_to_geolocation(PanoSimLocation(0, 0, 0))
         self._observer_location.lon = str(geo_location.longitude)
         self._observer_location.lat = str(geo_location.latitude)
 
@@ -149,7 +148,7 @@ class OSCWeatherBehavior(py_trees.behaviour.Behaviour):
         if weather:
             self._weather = weather
             delattr(py_trees.blackboard.Blackboard(), "CarlaWeather")
-            CarlaDataProvider.get_world().set_weather(self._weather.carla_weather)
+            PanoSimDataProvider.get_world().set_weather(self._weather.carla_weather)
             py_trees.blackboard.Blackboard().set("Datetime", self._weather.datetime, overwrite=True)
 
         if self._weather and self._weather.animation:
@@ -159,7 +158,7 @@ class OSCWeatherBehavior(py_trees.behaviour.Behaviour):
             if delta_time > 1:
                 self._weather.update(delta_time)
                 self._current_time = new_time
-                CarlaDataProvider.get_world().set_weather(self._weather.carla_weather)
+                PanoSimDataProvider.get_world().set_weather(self._weather.carla_weather)
 
                 py_trees.blackboard.Blackboard().set("Datetime", self._weather.datetime, overwrite=True)
 
@@ -169,7 +168,7 @@ class OSCWeatherBehavior(py_trees.behaviour.Behaviour):
 class RouteWeatherBehavior(py_trees.behaviour.Behaviour):
 
     """
-    Given a set of route weathers ([position, carla.WeatherParameters]),
+    Given a set of route weathers ([position, PanoSimWeather]),
     monitors the ego vehicle to dynamically change the weather as the ego advanced through the route.
 
     This behavior interpolates the desired weather between two weather keypoints and if the extreme cases
@@ -184,7 +183,7 @@ class RouteWeatherBehavior(py_trees.behaviour.Behaviour):
         Setup parameters
         """
         super().__init__(name)
-        self._world = CarlaDataProvider.get_world()
+        self._world = PanoSimDataProvider.get_world()
         self._ego_vehicle = ego_vehicle
         self._route = route
 
@@ -206,12 +205,7 @@ class RouteWeatherBehavior(py_trees.behaviour.Behaviour):
                 location = transform.location
                 new_perc = int(perc)
                 if new_perc > debug_perc:
-                    self._world.debug.draw_string(
-                        location + carla.Location(z=1),
-                        str(new_perc),
-                        color=carla.Color(50, 50, 50),
-                        life_time=100000
-                    )
+                    self._world.debug.draw_string(location + PanoSimLocation(z=1), str(new_perc), color=PanoSimColor(50, 50, 50), life_time=100000)
                     debug_perc = new_perc
         self._route_weathers = self.get_route_weathers()
 
@@ -253,7 +247,7 @@ class RouteWeatherBehavior(py_trees.behaviour.Behaviour):
                 prev_w = self._weathers[weather_index]
                 next_w = self._weathers[weather_index + 1]
 
-            weather = carla.WeatherParameters()
+            weather = PanoSimWeather()
             weather.cloudiness = interpolate(prev_w, next_w, perc, 'cloudiness')
             weather.precipitation = interpolate(prev_w, next_w, perc, 'precipitation')
             weather.precipitation_deposits = interpolate(prev_w, next_w, perc, 'precipitation_deposits')
@@ -278,7 +272,7 @@ class RouteWeatherBehavior(py_trees.behaviour.Behaviour):
         """
         new_status = py_trees.common.Status.RUNNING
 
-        ego_location = CarlaDataProvider.get_location(self._ego_vehicle)
+        ego_location = PanoSimDataProvider.get_location(self._ego_vehicle)
         if ego_location is None:
             return new_status
 

@@ -14,12 +14,10 @@ from __future__ import print_function
 import operator
 import py_trees
 
-import carla
-
 from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import (WaitForBlackboardVariable,
                                                                                InTimeToArrivalToLocation)
 from srunner.scenariomanager.scenarioatomics.atomic_behaviors import WaitForever
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+from srunner.scenariomanager.data_provider import PanoSimDataProvider, PanoSimLocation, PanoSimTransform
 from srunner.scenariomanager.timer import TimeOut
 from srunner.scenariomanager.scenarioatomics.atomic_behaviors import UpdateAllActorControls
 from srunner.scenariomanager.scenarioatomics.atomic_criteria import Criterion
@@ -47,7 +45,8 @@ class BasicScenario(object):
         self.terminate_on_failure = terminate_on_failure
         self.criteria_enable = criteria_enable
 
-        self.route_mode = bool(config.route)
+        # self.route_mode = bool(config.route)
+        self.route_mode = False
         self.behavior_tree = None
         self.criteria_tree = None
 
@@ -63,9 +62,9 @@ class BasicScenario(object):
 
         self._initialize_actors(config)
 
-        if CarlaDataProvider.is_runtime_init_mode():
+        if PanoSimDataProvider.is_runtime_init_mode():
             world.wait_for_tick()
-        elif CarlaDataProvider.is_sync_mode():
+        elif PanoSimDataProvider.is_sync_mode():
             world.tick()
         else:
             world.wait_for_tick()
@@ -146,18 +145,19 @@ class BasicScenario(object):
         world.set_weather(self.config.weather)
 
         # Set the appropriate road friction
-        if self.config.friction is not None:
-            friction_bp = world.get_blueprint_library().find('static.trigger.friction')
-            extent = carla.Location(1000000.0, 1000000.0, 1000000.0)
-            friction_bp.set_attribute('friction', str(self.config.friction))
-            friction_bp.set_attribute('extent_x', str(extent.x))
-            friction_bp.set_attribute('extent_y', str(extent.y))
-            friction_bp.set_attribute('extent_z', str(extent.z))
+        if hasattr(self.config, 'friction'):
+            if self.config.friction is not None:
+                friction_bp = world.get_blueprint_library().find('static.trigger.friction')
+                extent = PanoSimLocation(1000000.0, 1000000.0, 1000000.0)
+                friction_bp.set_attribute('friction', str(self.config.friction))
+                friction_bp.set_attribute('extent_x', str(extent.x))
+                friction_bp.set_attribute('extent_y', str(extent.y))
+                friction_bp.set_attribute('extent_z', str(extent.z))
 
-            # Spawn Trigger Friction
-            transform = carla.Transform()
-            transform.location = carla.Location(-10000.0, -10000.0, 0.0)
-            world.spawn_actor(friction_bp, transform)
+                # Spawn Trigger Friction
+                transform = PanoSimTransform()
+                transform.location = PanoSimLocation(-10000.0, -10000.0, 0.0)
+                world.spawn_actor(friction_bp, transform)
 
     def _initialize_actors(self, config):
         """
@@ -165,7 +165,7 @@ class BasicScenario(object):
         Override this method in child class to provide custom initialization.
         """
         if config.other_actors:
-            new_actors = CarlaDataProvider.request_new_actors(config.other_actors)
+            new_actors = PanoSimDataProvider.request_new_actors(config.other_actors)
             if not new_actors:
                 raise Exception("Error: Unable to add actors")
 
@@ -179,13 +179,16 @@ class BasicScenario(object):
 
         The function can be overloaded by a user implementation inside the user-defined scenario class.
         """
-        if config.trigger_points and config.trigger_points[0]:
-            start_location = config.trigger_points[0].location
+        if hasattr(config, 'trigger_points'):
+            if config.trigger_points and config.trigger_points[0]:
+                start_location = config.trigger_points[0].location
+            else:
+                return None
         else:
             return None
 
         # Scenario is not part of a route, wait for the ego to move
-        if not self.route_mode or config.route_var_name is None:
+        if not self.route_mode or (hasattr(config, 'route_var_name') and config.route_var_name is None):
             return InTimeToArrivalToLocation(self.ego_vehicles[0], 2.0, start_location)
 
         # Scenario is part of a route.
@@ -325,8 +328,8 @@ class BasicScenario(object):
             return
         for i, _ in enumerate(self.other_actors):
             if self.other_actors[i] is not None:
-                if CarlaDataProvider.actor_id_exists(self.other_actors[i].id):
-                    CarlaDataProvider.remove_actor_by_id(self.other_actors[i].id)
+                if PanoSimDataProvider.actor_id_exists(self.other_actors[i].id):
+                    PanoSimDataProvider.remove_actor_by_id(self.other_actors[i].id)
                 self.other_actors[i] = None
         self.other_actors = []
 

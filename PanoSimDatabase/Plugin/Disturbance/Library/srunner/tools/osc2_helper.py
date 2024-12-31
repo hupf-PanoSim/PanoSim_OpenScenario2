@@ -4,7 +4,6 @@ import math
 import operator
 from typing import List, Tuple
 
-import carla
 import numpy as np
 from antlr4.CommonTokenStream import CommonTokenStream
 from antlr4.FileStream import FileStream
@@ -18,6 +17,8 @@ from srunner.osc2.osc2_parser.OpenSCENARIO2Parser import (
     OpenSCENARIO2Parser as OSC2Parser,
 )
 from srunner.osc2.osc_preprocess.pre_process import Preprocess
+
+from srunner.scenariomanager.data_provider import PanoSimRotation
 
 
 class OSC2Helper(object):
@@ -172,7 +173,7 @@ class OSC2Helper(object):
         return None
 
     @staticmethod
-    def euler_orientation(rotation: carla.Rotation):
+    def euler_orientation(rotation: PanoSimRotation):
         pitch = rotation.pitch
         yaw = rotation.yaw
         roll = rotation.roll

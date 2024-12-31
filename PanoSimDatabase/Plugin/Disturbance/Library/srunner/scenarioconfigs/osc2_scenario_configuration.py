@@ -7,8 +7,6 @@ generate relevant type objects in the standard library, and set parameters
 import sys
 from typing import List, Tuple
 
-import carla
-
 import srunner.osc2_stdlib.misc_object as misc
 import srunner.osc2_stdlib.variables as variable
 import srunner.osc2_stdlib.vehicle as vehicles
@@ -24,7 +22,7 @@ from srunner.osc2_stdlib.path import Path
 from srunner.scenarioconfigs.scenario_configuration import ScenarioConfiguration
 
 # pylint: enable=line-too-long
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+from srunner.scenariomanager.data_provider import PanoSimDataProvider, PanoSimWeather
 
 # OSC2
 from srunner.tools.osc2_helper import OSC2Helper
@@ -56,8 +54,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
         self.variables = {}
         self.unit_dict = {}
         self.physical_dict = {}
-        self.weather = carla.WeatherParameters()
-        # 默认为白天
+        self.weather = PanoSimWeather()
         self.weather.sun_azimuth_angle = 45
         self.weather.sun_altitude_angle = 70
 
@@ -85,9 +82,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
             super().__init__()
             self.father_ins = configInstance
 
-        def visit_global_parameter_declaration(
-            self, node: ast_node.GlobalParameterDeclaration
-        ):
+        def visit_global_parameter_declaration(self, node: ast_node.GlobalParameterDeclaration):
             para_name = node.field_name[0]
             para_type = ""
             para_value = ""
@@ -150,10 +145,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
             if isinstance(arguments, list) and len(arguments) == 2:
                 para_type = arguments[0]
                 para_value = arguments[1]
-                if (
-                    self.father_ins.variables.get(str(para_value)) is not None
-                    and para_type not in vehicle_type
-                ):
+                if (self.father_ins.variables.get(str(para_value)) is not None and para_type not in vehicle_type):
                     para_value = self.father_ins.variables.get(str(para_value))
                 self.father_ins.variables[para_name] = para_value
             elif isinstance(arguments, str):
@@ -200,9 +192,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
                     for arg in arguments:
                         if isinstance(arg, Tuple):
                             if self.father_ins.variables.get(arg[0]) is not None:
-                                keyword_args[arg[0]] = self.father_ins.variables.get(
-                                    arg[0]
-                                )
+                                keyword_args[arg[0]] = self.father_ins.variables.get(arg[0])
                             else:
                                 keyword_args[arg[0]] = arg[1]
                         else:
@@ -220,9 +210,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
                 if hasattr(vehicles.Vehicle, function_name):
                     position_args = []
                     keyword_args = {}
-                    position_function = getattr(
-                        self.father_ins.ego_vehicles[0], function_name
-                    )
+                    position_function = getattr(self.father_ins.ego_vehicles[0], function_name)
 
                     pos = misc.WorldPosition(0, 0, 0, 0, 0, 0)
                     position_cls = getattr(pos, "__init__")
@@ -254,9 +242,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
                     for arg in arguments:
                         if isinstance(arg, Tuple):
                             if self.father_ins.variables.get(arg[0]) is not None:
-                                keyword_args[arg[0]] = self.father_ins.variables.get(
-                                    arg[0]
-                                )
+                                keyword_args[arg[0]] = self.father_ins.variables.get(arg[0])
                             else:
                                 keyword_args[arg[0]] = arg[1]
                         else:
@@ -339,9 +325,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
                 return var_range
 
         def visit_physical_literal(self, node: ast_node.PhysicalLiteral):
-            return Physical(
-                self.visit_children(node), self.father_ins.unit_dict[node.unit_name]
-            )
+            return Physical(self.visit_children(node), self.father_ins.unit_dict[node.unit_name])
 
         def visit_integer_literal(self, node: ast_node.IntegerLiteral):
             return int(node.value)
@@ -364,9 +348,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
         def visit_type(self, node: ast_node.Type):
             return node.type_name
 
-        def visit_physical_type_declaration(
-            self, node: ast_node.PhysicalTypeDeclaration
-        ):
+        def visit_physical_type_declaration(self, node: ast_node.PhysicalTypeDeclaration):
             si_base_exponent = {}
             arguments = self.visit_children(node)
             arguments = flat_list(arguments)
@@ -375,9 +357,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
             else:
                 for elem in arguments:
                     si_base_exponent[elem[0]] = elem[1]
-            self.father_ins.physical_dict[node.type_name] = PhysicalObject(
-                node.type_name, si_base_exponent
-            )
+            self.father_ins.physical_dict[node.type_name] = PhysicalObject(node.type_name, si_base_exponent)
 
         def visit_unit_declaration(self, node: ast_node.UnitDeclaration):
             arguments = self.visit_children(node)
@@ -389,12 +369,7 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
                     factor = elem[1]
                 elif elem[0] == "offset":
                     offset = elem[1]
-            self.father_ins.unit_dict[node.unit_name] = UnitObject(
-                node.unit_name,
-                self.father_ins.physical_dict[node.physical_name],
-                factor,
-                offset,
-            )
+            self.father_ins.unit_dict[node.unit_name] = UnitObject(node.unit_name, self.father_ins.physical_dict[node.physical_name], factor, offset,)
 
         def visit_si_base_exponent(self, node: ast_node.SIBaseExponent):
             return node.unit_name, self.visit_children(node)
@@ -412,22 +387,27 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
         """ """
         self.town = self.path.get_map()
 
+        if self.town == 'Town01':
+            # from town01 net.xml: netOffset="0.06,328.61"
+            PanoSimDataProvider._net_offset = (0.06, 328.61)
+        elif self.town == 'Town04':
+            # from town04 net.xml: netOffset="503.02,423.76"
+            PanoSimDataProvider._net_offset = (503.02, 423.76)
+
         # workaround for relative positions during init
         world = self.client.get_world()
         wmap = None
         if world:
             world.get_settings()
             wmap = world.get_map()
-        if world is None or (
-            wmap is not None and wmap.name.split("/")[-1] != self.town
-        ):
+        if world is None or (wmap is not None and wmap.name.split("/")[-1] != self.town):
             self.client.load_world(self.town)
             world = self.client.get_world()
 
-            CarlaDataProvider.set_world(world)
-            if CarlaDataProvider.is_sync_mode():
+            PanoSimDataProvider.set_world(world)
+            if PanoSimDataProvider.is_sync_mode():
                 world.tick()
             else:
                 world.wait_for_tick()
         else:
-            CarlaDataProvider.set_world(world)
+            PanoSimDataProvider.set_world(world)

@@ -20,9 +20,8 @@ import traceback
 import py_trees
 
 from numpy import random
-import carla
 
-from agents.navigation.local_planner import RoadOption
+# from agents.navigation.local_planner import RoadOption
 
 from srunner.scenarioconfigs.scenario_configuration import ActorConfigurationData
 from srunner.scenariomanager.carla_data_provider import CarlaDataProvider

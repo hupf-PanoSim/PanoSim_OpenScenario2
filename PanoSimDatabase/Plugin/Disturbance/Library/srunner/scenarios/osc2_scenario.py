@@ -9,7 +9,7 @@ import sys
 from typing import List, Tuple
 
 import py_trees
-from agents.navigation.global_route_planner import GlobalRoutePlanner
+# from agents.navigation.global_route_planner import GlobalRoutePlanner
 
 from srunner.osc2.ast_manager import ast_node
 from srunner.osc2.ast_manager.ast_vistor import ASTVisitor
@@ -36,9 +36,11 @@ from srunner.osc2_stdlib.modifier import (
 from srunner.scenarioconfigs.osc2_scenario_configuration import (
     OSC2ScenarioConfiguration,
 )
-from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+from srunner.scenariomanager.data_provider import PanoSimDataProvider, PanoSimWaypoint
 from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (
-    ActorTransformSetter,
+    PanoSimActorTransformSetter,
+    PanoSimChangeSpeed,
+    PanoSimChangeLane,
     ChangeTargetSpeed,
     LaneChange,
     UniformAcceleration,
@@ -55,6 +57,8 @@ from srunner.scenarios.basic_scenario import BasicScenario
 from srunner.tools.openscenario_parser import oneshot_with_check
 from srunner.tools.osc2_helper import OSC2Helper
 
+from TrafficModelInterface import *
+
 
 def para_type_str_sequence(config, arguments, line, column, node):
     retrieval_name = ""
@@ -70,16 +74,12 @@ def para_type_str_sequence(config, arguments, line, column, node):
                 elif isinstance(arg[1], bool):
                     retrieval_name = retrieval_name + "#bool"
                 elif isinstance(arg[1], Physical):
-                    physical_type_name = OSC2Helper.find_physical_type(
-                        config.physical_dict, arg[1].unit.physical.si_base_exponent
-                    )
+                    physical_type_name = OSC2Helper.find_physical_type(config.physical_dict, arg[1].unit.physical.si_base_exponent)
 
                     if physical_type_name is None:
                         pass
                     else:
-                        physical_type = (
-                            node.get_scope().resolve(physical_type_name).name
-                        )
+                        physical_type = (node.get_scope().resolve(physical_type_name).name)
                         retrieval_name += "#" + physical_type
                 else:
                     pass
@@ -97,10 +97,7 @@ def para_type_str_sequence(config, arguments, line, column, node):
         elif isinstance(arguments[1], bool):
             retrieval_name = retrieval_name + "#bool"
         elif isinstance(arguments[1], Physical):
-            physical_type_name = OSC2Helper.find_physical_type(
-                config.physical_dict, arguments[1].unit.physical.si_base_exponent
-            )
-
+            physical_type_name = OSC2Helper.find_physical_type(config.physical_dict, arguments[1].unit.physical.si_base_exponent)
             if physical_type_name is None:
                 pass
             else:
@@ -117,10 +114,7 @@ def para_type_str_sequence(config, arguments, line, column, node):
     elif isinstance(arguments, bool):
         retrieval_name = retrieval_name + "#bool"
     elif isinstance(arguments, Physical):
-        physical_type_name = OSC2Helper.find_physical_type(
-            config.physical_dict, arguments.unit.physical.si_base_exponent
-        )
-
+        physical_type_name = OSC2Helper.find_physical_type(config.physical_dict, arguments.unit.physical.si_base_exponent)
         if physical_type_name is None:
             pass
         else:
@@ -131,9 +125,7 @@ def para_type_str_sequence(config, arguments, line, column, node):
     return retrieval_name
 
 
-def process_speed_modifier(
-    config, modifiers, duration: float, all_duration: float, father_tree
-):
+def process_speed_modifier(config, modifiers, duration: float, all_duration: float, father_tree):
     if not modifiers:
         return
 
@@ -141,23 +133,18 @@ def process_speed_modifier(
         actor_name = modifier.get_actor_name()
 
         if isinstance(modifier, SpeedModifier):
-            # en_value_mps() The speed unit in Carla is m/s, so the default conversion unit is m/s
             target_speed = modifier.get_speed().gen_physical_value()
-            # target_speed = float(modifier.get_speed())*0.27777778
-            actor = CarlaDataProvider.get_actor_by_name(actor_name)
-            car_driving = WaypointFollower(actor, target_speed)
-            # car_driving.set_duration(duration)
-
-            father_tree.add_child(car_driving)
+            actor = PanoSimDataProvider.get_actor_by_name(actor_name)
+            if actor_name != 'ego_vehicle':
+                change_speed = PanoSimChangeSpeed(actor, actor_name, target_speed, duration)
+                father_tree.add_child(change_speed)
+                # car_driving = WaypointFollower(actor, target_speed)
+                # father_tree.add_child(car_driving)
 
             car_config = config.get_car_config(actor_name)
             car_config.set_arg({"target_speed": target_speed})
-            LOG_WARNING(
-                f"{actor_name} car speed will be set to {target_speed * 3.6} km/h"
-            )
+            LOG_WARNING(f"{actor_name} car speed will be set to {target_speed * 3.6} km/h")
 
-            # # _velocity speed, go straight down the driveway, and will hit the wall
-            # keep_speed = KeepVelocity(actor, target_speed, duration=father_duration.num)
         elif isinstance(modifier, ChangeSpeedModifier):
             # speed_delta indicates the increment of velocity
             speed_delta = modifier.get_speed().gen_physical_value()
@@ -166,11 +153,9 @@ def process_speed_modifier(
             current_car_speed = current_car_conf.get_arg("target_speed")
             current_car_speed = current_car_speed * 3.6
             target_speed = current_car_speed + speed_delta
-            LOG_WARNING(
-                f"{actor_name} car speed will be changed to {target_speed} km/h"
-            )
+            LOG_WARNING(f"{actor_name} car speed will be changed to {target_speed} km/h")
 
-            actor = CarlaDataProvider.get_actor_by_name(actor_name)
+            actor = PanoSimDataProvider.get_actor_by_name(actor_name)
             change_speed = ChangeTargetSpeed(actor, target_speed)
 
             car_driving = WaypointFollower(actor)
@@ -183,11 +168,9 @@ def process_speed_modifier(
             current_car_speed = current_car_conf.get_arg("target_speed")
             accelerate_speed = modifier.get_accelerate().gen_physical_value()
             target_velocity = current_car_speed + accelerate_speed * duration
-            actor = CarlaDataProvider.get_actor_by_name(actor_name)
+            actor = PanoSimDataProvider.get_actor_by_name(actor_name)
             start_time = all_duration - duration
-            uniform_accelerate_speed = UniformAcceleration(
-                actor, current_car_speed, target_velocity, accelerate_speed, start_time
-            )
+            uniform_accelerate_speed = UniformAcceleration(actor, current_car_speed, target_velocity, accelerate_speed, start_time)
             print("END ACCELERATION")
             car_driving = WaypointFollower(actor)
 
@@ -217,38 +200,25 @@ def process_location_modifier(config, modifiers, duration: float, father_tree):
             av_side = modifier.get_side()
             print(f"The car changes lanes to the {av_side} for {lane_changes} lanes.")
             npc_name = modifier.get_actor_name()
-            actor = CarlaDataProvider.get_actor_by_name(npc_name)
-            lane_change = LaneChange(
-                actor, speed=None, direction=av_side, lane_changes=lane_changes
-            )
+            actor = PanoSimDataProvider.get_actor_by_name(npc_name)
+            lane_change = LaneChange(actor, speed=None, direction=av_side, lane_changes=lane_changes)
             continue_drive = WaypointFollower(actor)
             father_tree.add_child(lane_change)
             father_tree.add_child(continue_drive)
             print("END of change lane--")
             return
-    # start
-    # Deal with absolute positioning vehicles first，such as lane(1, at: start)
+
     event_start = [
         m
         for m in modifiers
         if m.get_trigger_point() == "start" and m.get_refer_car() is None
     ]
-
-    for m in event_start:
-        car_name = m.get_actor_name()
-        wp = CarlaDataProvider.get_waypoint_by_laneid(m.get_lane_id())
-        if wp:
-            actor = CarlaDataProvider.get_actor_by_name(car_name)
-            actor_visible = ActorTransformSetter(actor, wp.transform)
+    if event_start:
+        actor_name = event_start[0].get_actor_name()
+        if actor_name != 'ego_vehicle':
+            actor = PanoSimDataProvider.get_actor_by_name(actor_name)
+            actor_visible = PanoSimActorTransformSetter(actor, actor_name, 'event', modifiers)
             father_tree.add_child(actor_visible)
-
-            car_config = config.get_car_config(car_name)
-            car_config.set_arg({"init_transform": wp.transform})
-            LOG_INFO(
-                f"{car_name} car init position will be set to {wp.transform.location}, roadid = {wp.road_id}, laneid={wp.lane_id}, s = {wp.s}"
-            )
-        else:
-            raise RuntimeError(f"no valid position to spawn {car_name} car")
 
     # Handle relative positioning vehicles
     start_group = [
@@ -256,63 +226,18 @@ def process_location_modifier(config, modifiers, duration: float, father_tree):
         for m in modifiers
         if m.get_trigger_point() == "start" and m.get_refer_car() is not None
     ]
-
-    init_wp = None
-    npc_name = None
-
-    for modifier in start_group:
-        npc_name = modifier.get_actor_name()
-        # location reprents npc at ego_vehicle left, right, same, ahead
-        relative_car_name, location = modifier.get_refer_car()
-        relative_car_conf = config.get_car_config(relative_car_name)
-        relative_car_location = relative_car_conf.get_transform().location
-
-        relative_wp = CarlaDataProvider.get_map().get_waypoint(relative_car_location)
-
-        if init_wp is None:
-            init_wp = relative_wp
-
-        if location == "left_of":
-            temp_lane = init_wp.get_left_lane()
-            if temp_lane:
-                init_wp = temp_lane
-
-        elif location == "right_of":
-            temp_lane = init_wp.get_right_lane()
-            if temp_lane:
-                init_wp = temp_lane
-        elif location == "same_as":
-            # Same lane
-            pass
-        elif location in ('ahead_of', 'behind'):
-            distance = modifier.get_distance().gen_physical_value()
-
-            if location == "ahead_of":
-                wp_lists = init_wp.next(distance)
-            else:
-                wp_lists = init_wp.previous(distance)
-            if wp_lists:
-                init_wp = wp_lists[0]
-        else:
-            raise KeyError(f"wrong location = {location}")
-
-    if init_wp:
-        actor = CarlaDataProvider.get_actor_by_name(npc_name)
-        npc_car_visible = ActorTransformSetter(actor, init_wp.transform)
+    if start_group:
+        actor_name = start_group[0].get_actor_name()
+        actor = PanoSimDataProvider.get_actor_by_name(actor_name)
+        npc_car_visible = PanoSimActorTransformSetter(actor, actor_name, 'start', start_group)
         father_tree.add_child(npc_car_visible)
-
-        car_config = config.get_car_config(npc_name)
-        car_config.set_arg({"init_transform": init_wp.transform})
-        LOG_WARNING(
-            f"{npc_name} car init position will be set to {init_wp.transform.location},roadid = {init_wp.road_id}, laneid={init_wp.lane_id}, s={init_wp.s}"
-        )
 
     # end
     end_group = [m for m in modifiers if m.get_trigger_point() == "end"]
-
     end_wp = None
     end_lane_wp = None
-
+    npc_name = None
+    end_offset = 0
     for modifier in end_group:
         npc_name = modifier.get_actor_name()
 
@@ -321,109 +246,37 @@ def process_location_modifier(config, modifiers, duration: float, father_tree):
         relative_car_location = relative_car_conf.get_transform().location
         LOG_WARNING(f"{relative_car_name} pos = {relative_car_location}")
 
-        relative_car_wp = CarlaDataProvider.get_map().get_waypoint(
-            relative_car_location
-        )
         relative_car_speed = relative_car_conf.get_arg("target_speed")
 
         distance_will_drive = relative_car_speed * float(duration)
         LOG_WARNING(f"{relative_car_name} drive distance = {distance_will_drive}")
 
-        end_position = relative_car_wp.next(distance_will_drive)
-        if end_position is None or len(end_position) == 0:
-            raise RuntimeError("the road is not long enough")
-
-        end_position = end_position[0]
-
         if location in ('ahead_of', 'behind'):
-            # End position constraint
-            distance = modifier.get_distance().gen_physical_value()
+            end_offset = modifier.get_distance().gen_physical_value()
             if location == "ahead_of":
-                wp_lists = end_position.next(distance)
+                end_offset = end_offset * 1
             else:
-                wp_lists = end_position.previous(distance)
-            if wp_lists:
-                end_wp = wp_lists[0]
-        elif location in ('left_of', 'right_of', 'same_as'):
-            # Lane restraint at the end
-            if location == "left_of":
-                temp_wp = relative_car_wp.get_left_lane()
-            elif location == "right_of":
-                temp_wp = relative_car_wp.get_right_lane()
-            elif location == "same_as":
-                temp_wp = relative_car_wp
-            else:
-                LOG_INFO("lane spec is error")
+                end_offset = end_offset * -1
+            end_wp = PanoSimWaypoint()
 
-            end_lane_wp = temp_wp
+        elif location in ('left_of', 'right_of', 'same_as'):
+            end_lane_wp = PanoSimWaypoint()
         else:
             raise RuntimeError("relative position is igeal")
 
     if end_wp:
-        current_car_conf = config.get_car_config(npc_name)
-        current_car_transform = current_car_conf.get_arg("init_transform")
+        ego_conf = config.get_car_config('ego_vehicle')
+        ego_speed = ego_conf.get_arg("target_speed")
+        ego_distance = ego_speed * float(duration)
 
-        # Get the global route planner, used to calculate the route
-        grp = GlobalRoutePlanner(CarlaDataProvider.get_world().get_map(), 0.5)
-        # grp.setup()
-
-        distance = calculate_distance(
-            current_car_transform.location, end_wp.transform.location, grp
-        )
-
-        car_need_speed = distance / float(duration)
-
-        current_car_conf.set_arg({"desired_speed": car_need_speed})
-        LOG_WARNING(
-            f"{npc_name} car desired speed will be set to {car_need_speed * 3.6} km/h"
-        )
-
-        car_actor = CarlaDataProvider.get_actor_by_name(npc_name)
-        car_driving = WaypointFollower(car_actor, car_need_speed)
-        # car_driving.set_duration(duration)
-        father_tree.add_child(car_driving)
+        car_actor = PanoSimDataProvider.get_actor_by_name(npc_name)
+        change_speed = PanoSimChangeSpeed(car_actor, npc_name, -1, duration, ego_distance, end_offset)
+        father_tree.add_child(change_speed)
 
     if end_lane_wp:
-        current_car_conf = config.get_car_config(npc_name)
-        current_car_transform = current_car_conf.get_arg("init_transform")
-        car_lane_wp = CarlaDataProvider.get_map().get_waypoint(
-            current_car_transform.location
-        )
-
-        direction = None
-        if end_lane_wp and car_lane_wp:
-            end_lane_id = end_lane_wp.lane_id
-            end_lane = None
-            if end_lane_id == car_lane_wp.get_left_lane().lane_id:
-                direction = "left"
-                end_lane = car_lane_wp.get_left_lane()
-            elif end_lane_id == car_lane_wp.get_right_lane().lane_id:
-                direction = "right"
-                end_lane = car_lane_wp.get_right_lane()
-            else:
-                print("no need change lane")
-
-            car_actor = CarlaDataProvider.get_actor_by_name(npc_name)
-
-            lane_change = LaneChange(
-                car_actor,
-                speed=None,
-                direction=direction,
-                distance_same_lane=5,
-                distance_other_lane=10,
-            )
-            # lane_change.set_duration(duration)
-
-            if end_lane:
-                # After lane change, the car needs to modify its lane information.
-                # Here, there should be a special variable to save the current transform
-                car_config = config.get_car_config(npc_name)
-                car_config.set_arg({"init_transform": end_lane.transform})
-
-            continue_drive = WaypointFollower(car_actor)
-            # car_driving.set_duration(duration)
-            father_tree.add_child(lane_change)
-            father_tree.add_child(continue_drive)
+        car_actor = PanoSimDataProvider.get_actor_by_name(npc_name)
+        lane_change = PanoSimChangeLane(car_actor, duration, location)
+        father_tree.add_child(lane_change)
 
 
 class OSC2Scenario(BasicScenario):
@@ -431,16 +284,7 @@ class OSC2Scenario(BasicScenario):
     Implementation of the osc2 Scenario
     """
 
-    def __init__(
-        self,
-        world,
-        ego_vehicles,
-        config: OSC2ScenarioConfiguration,
-        osc2_file,
-        debug_mode=False,
-        criteria_enable=True,
-        timeout=300,
-    ):
+    def __init__(self, world, ego_vehicles, config: OSC2ScenarioConfiguration, osc2_file, debug_mode=False, criteria_enable=True, timeout=300,):
         """
         Setup all relevant parameters and create scenario
         """
@@ -463,15 +307,8 @@ class OSC2Scenario(BasicScenario):
         # Use struct_parameters to store parameters of type struct, so that we can recognize it in keep constraint
         self.struct_parameters = {}
 
-        super(OSC2Scenario, self).__init__(
-            "OSC2Scenario",
-            ego_vehicles=ego_vehicles,
-            config=config,
-            world=world,
-            debug_mode=debug_mode,
-            terminate_on_failure=False,
-            criteria_enable=criteria_enable,
-        )
+        super(OSC2Scenario, self).__init__("OSC2Scenario", ego_vehicles=ego_vehicles, config=config, world=world, 
+                                           debug_mode=debug_mode, terminate_on_failure=False, criteria_enable=criteria_enable)
 
     def set_behavior_tree(self, behavior):
         self.behavior = behavior
@@ -525,10 +362,10 @@ class OSC2Scenario(BasicScenario):
             y = expression_value[1]
             if "ego" in x:
                 actor_name = "ego_vehicle"
-                actor_ego = CarlaDataProvider.get_actor_by_name(actor_name)
+                actor_ego = PanoSimDataProvider.get_actor_by_name(actor_name)
             if "npc" in y:
                 actor_name = "npc"
-                actor_npc = CarlaDataProvider.get_actor_by_name(actor_name)
+                actor_npc = PanoSimDataProvider.get_actor_by_name(actor_name)
             return actor_ego, actor_npc, symbol
 
         def visit_do_member(self, node: ast_node.DoMember):
@@ -537,37 +374,23 @@ class OSC2Scenario(BasicScenario):
             sub_node = None
             if composition_operator in ["serial", "parallel", "one_of"]:
                 if composition_operator == "serial":
-                    self.__cur_behavior = py_trees.composites.Sequence(
-                        policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL,
-                        name="serial",
-                    )
+                    self.__cur_behavior = py_trees.composites.Sequence(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name="serial")
                 elif composition_operator == "parallel":
-                    self.__cur_behavior = py_trees.composites.Parallel(
-                        policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL,
-                        name="parallel",
-                    )
+                    self.__cur_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name="parallel")
                 elif composition_operator == "one_of":
-                    self.__cur_behavior = py_trees.composites.Sequence(
-                        policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL,
-                        name="one_of",
-                    )
+                    self.__cur_behavior = py_trees.composites.Sequence(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL,name="one_of",)
                     do_member_list = []
                     for child in node.get_children():
                         if isinstance(child, ast_node.DoMember):
                             do_member_list.append(child)
                     sub_node = random.choice(do_member_list)
             else:
-                raise NotImplementedError(
-                    f"no supported scenario operator {composition_operator}"
-                )
+                raise NotImplementedError(f"no supported scenario operator {composition_operator}")
 
             if self.root_behavior is None:
                 self.root_behavior = self.__cur_behavior
                 self.__parent_behavior[node] = self.__cur_behavior
-            elif (
-                self.root_behavior is not None
-                and self.__parent_behavior.get(node) is None
-            ):
+            elif (self.root_behavior is not None and self.__parent_behavior.get(node) is None):
                 self.__parent_behavior[node] = self.root_behavior
                 parent = self.__parent_behavior[node]
                 parent.add_child(self.__cur_behavior)
@@ -595,9 +418,7 @@ class OSC2Scenario(BasicScenario):
                             if isinstance(named_arg[1], Physical):
                                 self.__duration = named_arg[1].gen_physical_value()
                             else:
-                                print(
-                                    "[Error] 'duration' parameter must be 'Physical' type"
-                                )
+                                print("[Error] 'duration' parameter must be 'Physical' type")
                                 sys.exit(1)
                     elif isinstance(child, ast_node.BehaviorInvocation):
                         self.visit_behavior_invocation(child)
@@ -619,24 +440,16 @@ class OSC2Scenario(BasicScenario):
                 self.father_ins.all_duration += int(self.__duration)
 
         def visit_wait_directive(self, node: ast_node.WaitDirective):
-            behaviors = py_trees.composites.Sequence(
-                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name="wait"
-            )
-            subbehavior = py_trees.composites.Sequence(
-                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name="behavior"
-            )
+            behaviors = py_trees.composites.Sequence(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name="wait")
+            subbehavior = py_trees.composites.Sequence(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name="behavior")
 
-            if node.get_child_count() == 1 and isinstance(
-                node.get_child(0), ast_node.EventCondition
-            ):
+            if node.get_child_count() == 1 and isinstance(node.get_child(0), ast_node.EventCondition):
                 elapsed_condition = self.visit_event_condition(node.get_child(0))
                 self.__duration = elapsed_condition.gen_physical_value()
                 print(elapsed_condition, self.__duration)
                 self.father_ins.all_duration += int(self.__duration)
                 waitTriggerer = TimeOfWaitComparison(self.__duration)
-                waitTriggerer = oneshot_with_check(
-                    variable_name="wait_time", behaviour=waitTriggerer
-                )
+                waitTriggerer = oneshot_with_check(variable_name="wait_time", behaviour=waitTriggerer)
                 subbehavior.add_child(waitTriggerer)
                 behaviors.add_child(subbehavior)
                 parent = self.__parent_behavior[node]
@@ -648,9 +461,7 @@ class OSC2Scenario(BasicScenario):
                 if not isinstance(child, ast_node.AST):
                     continue
                 if isinstance(child, ast_node.EventReference):
-                    event_declaration_node, event_name = self.visit_event_reference(
-                        child
-                    )
+                    event_declaration_node, event_name = self.visit_event_reference(child)
                 elif isinstance(child, ast_node.EventFieldDecl):
                     pass
                 elif isinstance(child, ast_node.EventCondition):
@@ -666,9 +477,7 @@ class OSC2Scenario(BasicScenario):
             ret = oneshot_with_check(variable_name="wait_condition", behaviour=ret)
 
             wait_triggerer = IfTriggerer(actor_ego, actor_npc, symbol)
-            wait_triggerer = oneshot_with_check(
-                variable_name="wait", behaviour=wait_triggerer
-            )
+            wait_triggerer = oneshot_with_check(variable_name="wait", behaviour=wait_triggerer)
             subbehavior.add_child(wait_triggerer)
             subbehavior.add_child(ret)
             behaviors.add_child(subbehavior)
@@ -677,9 +486,7 @@ class OSC2Scenario(BasicScenario):
             parent.add_child(behaviors)
 
         def visit_emit_directive(self, node: ast_node.EmitDirective):
-            behaviors = py_trees.composites.Sequence(
-                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name="emit"
-            )
+            behaviors = py_trees.composites.Sequence(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name="emit")
             function_name = node.event_name
             arguments = self.visit_children(node)
             actor = arguments[0][1]
@@ -701,14 +508,9 @@ class OSC2Scenario(BasicScenario):
             else:
                 behavior_invocation_name = behavior_name
 
-            if (
-                self.father_ins.scenario_declaration.get(behavior_invocation_name)
-                is not None
-            ):
+            if (self.father_ins.scenario_declaration.get(behavior_invocation_name) is not None):
                 self.father_ins.visit_power = True
-                scenario_declaration_node = copy.deepcopy(
-                    node.get_scope().declaration_address
-                )
+                scenario_declaration_node = copy.deepcopy(node.get_scope().declaration_address)
                 # scenario_declaration_node = self.father_ins.scenario_declaration.get(behavior_invocation_name)
                 scenario_declaration_node_scope = scenario_declaration_node.get_scope()
                 arguments = self.visit_children(node)
@@ -732,23 +534,13 @@ class OSC2Scenario(BasicScenario):
                 del scenario_declaration_node
                 return
 
-            behavior = py_trees.composites.Parallel(
-                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE,
-                name=behavior_invocation_name
-                + " duration="
-                + str(int(self.__duration)),
-            )
+            behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name=behavior_invocation_name + " duration=" + str(int(self.__duration)),)
 
             # Create node for timeout
-            timeout = TimeOut(
-                self.__duration, name="duration=" + str(int(self.__duration))
-            )
+            timeout = TimeOut(self.__duration, name="duration=" + str(int(self.__duration)))
             behavior.add_child(timeout)
 
-            actor_drive = py_trees.composites.Sequence(
-                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL,
-                name=behavior_invocation_name,
-            )
+            actor_drive = py_trees.composites.Sequence(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name=behavior_invocation_name,)
 
             modifier_invocation_no_occur = True
 
@@ -759,9 +551,7 @@ class OSC2Scenario(BasicScenario):
             for child in children:
                 if isinstance(child, ast_node.NamedArgument):
                     named_arg = self.visit_named_argument(child)
-                    if named_arg[0] == "duration" and isinstance(
-                        named_arg[1], Physical
-                    ):
+                    if named_arg[0] == "duration" and isinstance(named_arg[1], Physical):
                         self.__duration = named_arg[1].gen_physical_value()
                     elif named_arg[0] == "duration":
                         print("[Error] 'duration' parameter must be 'Physical' type")
@@ -788,12 +578,9 @@ class OSC2Scenario(BasicScenario):
                         elif isinstance(arguments, Physical):
                             keyword_args["speed"] = arguments
                         else:
-                            raise NotImplementedError(
-                                f"no implentment argument of {modifier_name}"
-                            )
+                            raise NotImplementedError(f"no implentment argument of {modifier_name}")
 
                         modifier_ins.set_args(keyword_args)
-
                         speed_modifiers.append(modifier_ins)
 
                     elif modifier_name == "position":
@@ -813,17 +600,13 @@ class OSC2Scenario(BasicScenario):
                         elif isinstance(arg, Physical):
                             keyword_args["distance"] = arguments
                         else:
-                            raise NotImplementedError(
-                                f"no implentment argument of {modifier_name}"
-                            )
+                            raise NotImplementedError(f"no implentment argument of {modifier_name}")
 
                         modifier_ins.set_args(keyword_args)
-
                         location_modifiers.append(modifier_ins)
 
                     elif modifier_name == "lane":
                         modifier_ins = LaneModifier(actor, modifier_name)
-
                         keyword_args = {}
                         if isinstance(arguments, List):
                             arguments = OSC2Helper.flat_list(arguments)
@@ -837,12 +620,10 @@ class OSC2Scenario(BasicScenario):
                         else:
                             keyword_args["lane"] = str(arguments)
                         modifier_ins.set_args(keyword_args)
-
                         location_modifiers.append(modifier_ins)
 
                     elif modifier_name == "acceleration":
                         modifier_ins = AccelerationModifier(actor, modifier_name)
-
                         keyword_args = {}
                         if isinstance(arguments, List):
                             arguments = OSC2Helper.flat_list(arguments)
@@ -859,10 +640,9 @@ class OSC2Scenario(BasicScenario):
                         speed_modifiers.append(modifier_ins)
 
                     elif modifier_name == "keep_lane":
-                        actor_object = CarlaDataProvider.get_actor_by_name(actor)
+                        actor_object = PanoSimDataProvider.get_actor_by_name(actor)
                         car_driving = WaypointFollower(actor_object)
                         actor_drive.add_child(car_driving)
-
                         behavior.add_child(actor_drive)
                         # self.__cur_behavior.add_child(behavior)
                         print("Target keep lane.")
@@ -870,7 +650,6 @@ class OSC2Scenario(BasicScenario):
                     elif modifier_name == "change_speed":
                         # change_speed([speed: ]<speed>)
                         modifier_ins = ChangeSpeedModifier(actor, modifier_name)
-
                         keyword_args = {}
                         if isinstance(arguments, Tuple):
                             keyword_args[arguments[0]] = arguments[1]
@@ -880,12 +659,10 @@ class OSC2Scenario(BasicScenario):
                             return f"Needed 1 arguments, but given {len(arguments)}arguments."
 
                         modifier_ins.set_args(keyword_args)
-
                         speed_modifiers.append(modifier_ins)
 
                     elif modifier_name == "change_lane":
                         modifier_ins = ChangeLaneModifier(actor, modifier_name)
-
                         keyword_args = {}
                         count = 0
                         for _, _ in enumerate(arguments):
@@ -905,31 +682,21 @@ class OSC2Scenario(BasicScenario):
                             return f"Needed 2 arguments, but given {len(arguments)}arguments."
 
                         modifier_ins.set_args(keyword_args)
-
                         location_modifiers.append(modifier_ins)
                     else:
-                        raise NotImplementedError(
-                            f"no implentment function: {modifier_name}"
-                        )
+                        raise NotImplementedError(f"no implentment function: {modifier_name}")
 
             if modifier_invocation_no_occur:
-                car_actor = CarlaDataProvider.get_actor_by_name(actor)
-                car_driving = WaypointFollower(car_actor)
-                actor_drive.add_child(car_driving)
-                behavior.add_child(actor_drive)
-                self.__cur_behavior.add_child(behavior)
+                if actor != 'ego_vehicle':
+                    car_actor = PanoSimDataProvider.get_actor_by_name(actor)
+                    car_driving = WaypointFollower(car_actor)
+                    actor_drive.add_child(car_driving)
+                    behavior.add_child(actor_drive)
+                    self.__cur_behavior.add_child(behavior)
                 return
 
-            process_location_modifier(
-                self.father_ins.config, location_modifiers, self.__duration, actor_drive
-            )
-            process_speed_modifier(
-                self.father_ins.config,
-                speed_modifiers,
-                self.__duration,
-                self.father_ins.all_duration,
-                actor_drive,
-            )
+            process_location_modifier(self.father_ins.config, location_modifiers, self.__duration, actor_drive)
+            process_speed_modifier(self.father_ins.config, speed_modifiers, self.__duration, self.father_ins.all_duration, actor_drive,)
 
             behavior.add_child(actor_drive)
             self.__cur_behavior.add_child(behavior)
@@ -944,31 +711,12 @@ class OSC2Scenario(BasicScenario):
             # arguments=arguments, line=line, column=column, node=node)
             retrieval_name = modifier_name
             method_scope = node.get_scope().resolve(retrieval_name)
-            if (
-                method_scope is None
-                and modifier_name not in dir(self.father_ins.config.path)
-                and modifier_name
-                not in (
-                    "speed",
-                    "lane",
-                    "position",
-                    "acceleration",
-                    "keep_lane",
-                    "change_speed",
-                    "change_lane",
-                )
-            ):
+            if (method_scope is None and modifier_name not in dir(self.father_ins.config.path) 
+                and modifier_name not in ("speed", "lane", "position", "acceleration", "keep_lane", "change_speed", "change_lane",)):
                 line, column = node.get_loc()
-                LOG_ERROR(
-                    "Not Find " + modifier_name + " Method Declaration",
-                    token=None,
-                    line=line,
-                    column=column,
-                )
+                LOG_ERROR("Not Find " + modifier_name + " Method Declaration", token=None, line=line, column=column,)
             if isinstance(method_scope, MethodSymbol):
-                method_declaration_node = copy.deepcopy(
-                    method_scope.declaration_address
-                )
+                method_declaration_node = copy.deepcopy(method_scope.declaration_address)
                 method_scope = method_declaration_node.get_scope()
                 if isinstance(arguments, List):
                     for arg in arguments:
@@ -992,12 +740,7 @@ class OSC2Scenario(BasicScenario):
             return modifier_name, arguments
 
         def visit_event_reference(self, node: ast_node.EventReference):
-            return (
-                copy.deepcopy(
-                    node.get_scope().resolve(node.event_path).declaration_address
-                ),
-                node.event_path,
-            )
+            return (copy.deepcopy(node.get_scope().resolve(node.event_path).declaration_address), node.event_path,)
             # return node.event_path
 
         def visit_event_field_declaration(self, node: ast_node.EventFieldDecl):
@@ -1019,9 +762,7 @@ class OSC2Scenario(BasicScenario):
                             right = temp_stack.pop()
                             left = temp_stack.pop()
                             innum = temp_stack.pop()
-                            expression = (
-                                innum + " " + ex + " [" + left + ", " + right + "]"
-                            )
+                            expression = (innum + " " + ex + " [" + left + ", " + right + "]")
                             temp_stack.append(expression)
                         else:
                             temp_stack.append(ex)
@@ -1151,10 +892,7 @@ class OSC2Scenario(BasicScenario):
                 return var_range
 
         def visit_physical_literal(self, node: ast_node.PhysicalLiteral):
-            return Physical(
-                self.visit_children(node),
-                self.father_ins.config.unit_dict[node.unit_name],
-            )
+            return Physical(self.visit_children(node), self.father_ins.config.unit_dict[node.unit_name],)
 
         def visit_integer_literal(self, node: ast_node.IntegerLiteral):
             return int(node.value)
@@ -1200,15 +938,9 @@ class OSC2Scenario(BasicScenario):
                     patter = re.compile("(^[-]?[0-9]+[\.[0-9]+]?)\s*(\w+)")
                     para_value_num, para_value_unit = patter.match(para_value).groups()
                     if para_value_num.count(".") == 1:
-                        return Physical(
-                            float(para_value_num),
-                            self.father_ins.config.unit_dict[para_value_unit],
-                        )
+                        return Physical(float(para_value_num), self.father_ins.config.unit_dict[para_value_unit],)
                     else:
-                        return Physical(
-                            int(para_value_num),
-                            self.father_ins.config.unit_dict[para_value_unit],
-                        )
+                        return Physical(int(para_value_num), self.father_ins.config.unit_dict[para_value_unit],)
                 elif para_type == "int":
                     return int(para_value)
                 elif para_type == "uint":
@@ -1236,9 +968,7 @@ class OSC2Scenario(BasicScenario):
 
             # Save variables of type struct for later access
             if para_type in self.father_ins.struct_declaration:
-                self.father_ins.struct_parameters.update(
-                    {para_name[0]: self.father_ins.struct_declaration[para_type]}
-                )
+                self.father_ins.struct_parameters.update({para_name[0]: self.father_ins.struct_declaration[para_type]})
 
         def visit_method_declaration(self, node: ast_node.MethodDeclaration):
             pass
@@ -1254,12 +984,7 @@ class OSC2Scenario(BasicScenario):
                 for child in node.get_children():
                     if isinstance(child, ast_node.PositionalArgument):
                         line, column = node.get_loc()
-                        LOG_ERROR(
-                            "not support external format.!",
-                            token=None,
-                            line=line,
-                            column=column,
-                        )
+                        LOG_ERROR("not support external format.!", token=None, line=line, column=column,)
                     elif isinstance(child, ast_node.NamedArgument):
                         name, value = self.visit_named_argument(child)
                         external_list.append((name, value))
@@ -1286,12 +1011,7 @@ class OSC2Scenario(BasicScenario):
                     method_value = exec_data["ret"]
                 except Exception:
                     line, column = node.get_loc()
-                    LOG_ERROR(
-                        "not support external format.!",
-                        token=None,
-                        line=line,
-                        column=column,
-                    )
+                    LOG_ERROR("not support external format.!", token=None, line=line, column=column,)
 
                 return method_value
             else:
@@ -1302,9 +1022,7 @@ class OSC2Scenario(BasicScenario):
                 return method_value
             return
 
-        def visit_function_application_expression(
-            self, node: ast_node.FunctionApplicationExpression
-        ):
+        def visit_function_application_expression(self, node: ast_node.FunctionApplicationExpression):
             LOG_INFO("visit function application expression!")
             LOG_INFO("func name:" + node.func_name)
 
@@ -1316,17 +1034,10 @@ class OSC2Scenario(BasicScenario):
 
             method_name = arguments[0]
             if method_scope is None:
-                LOG_ERROR(
-                    "Not Find " + method_name + " Method Declaration",
-                    token=None,
-                    line=line,
-                    column=column,
-                )
+                LOG_ERROR("Not Find " + method_name + " Method Declaration", token=None, line=line, column=column,)
             para_value = None
             if isinstance(method_scope, MethodSymbol):
-                method_declaration_node = copy.deepcopy(
-                    method_scope.declaration_address
-                )
+                method_declaration_node = copy.deepcopy(method_scope.declaration_address)
                 method_scope = method_declaration_node.get_scope()
                 if isinstance(arguments, List):
                     for arg in arguments:
@@ -1348,9 +1059,7 @@ class OSC2Scenario(BasicScenario):
             else:
                 pass
 
-        def visit_keep_constraint_declaration(
-            self, node: ast_node.KeepConstraintDeclaration
-        ):
+        def visit_keep_constraint_declaration(self, node: ast_node.KeepConstraintDeclaration):
             arguments = self.visit_children(node)
             retrieval_name = arguments[0]
 
@@ -1387,9 +1096,7 @@ class OSC2Scenario(BasicScenario):
         # The struct variable tree is a subtree of the symbol tree
         def _build_struct_tree(self, param_symbol: ParameterSymbol):
             if param_symbol.value is None:
-                param_symbol.value = copy.deepcopy(
-                    self.father_ins.struct_parameters[param_symbol.name]
-                ).get_scope()
+                param_symbol.value = copy.deepcopy(self.father_ins.struct_parameters[param_symbol.name]).get_scope()
             for key in param_symbol.value.symbols:
                 child_symbol = param_symbol.value.symbols[key]
                 if isinstance(child_symbol, ParameterSymbol):
@@ -1398,9 +1105,7 @@ class OSC2Scenario(BasicScenario):
                         self._build_struct_tree(child_symbol)
 
         # visit struct variable tree and assign value
-        def _visit_struct_tree(
-            self, root: ParameterSymbol, suffix: list, index: int, value
-        ):
+        def _visit_struct_tree(self, root: ParameterSymbol, suffix: list, index: int, value):
             if root.type not in self.father_ins.struct_declaration:
                 root.value = value
                 return
@@ -1410,15 +1115,14 @@ class OSC2Scenario(BasicScenario):
             child_symbols = root.value.symbols
             if to_visit_param not in child_symbols:
                 return
-            self._visit_struct_tree(
-                child_symbols[to_visit_param], suffix, index + 1, value
-            )
+            self._visit_struct_tree(child_symbols[to_visit_param], suffix, index + 1, value)
 
     def _create_behavior(self):
         """
         Basic behavior do nothing, i.e. Idle
         """
         behavior_builder = self.BehaviorInit(self)
+        # hupf: create behavior tree by ast tree
         behavior_builder.visit(self.ast_tree)
 
         behavior_tree = behavior_builder.get_behavior_tree()
@@ -1445,3 +1149,80 @@ class OSC2Scenario(BasicScenario):
         Remove all actors upon deletion
         """
         self.remove_all_actors()
+
+    # def create_actor(self):
+    #     offsetX, offsetY = PanoSimDataProvider._net_offset
+    #     type = vehicle_type.Car
+
+    #     for actor in self.other_actors:
+    #         if not actor.addVehicle:
+    #             # print(actor.id, actor.model, actor.actor_category, actor.transform.type)
+    #             old_id = actor.id
+    #             for _actor in self.config.other_actors:
+    #                 if _actor.model == actor.model:
+    #                     x = _actor.args['init_transform'].location.x + offsetX
+    #                     y = _actor.args['init_transform'].location.y * -1 + offsetY
+    #                     desired_speed = _actor.args['desired_speed']
+    #                     target_speed = _actor.args['target_speed']
+    #                     actor.speed = desired_speed
+    #                     id = addVehicle(x, y, 0, type)
+    #                     # print(x, y, desired_speed, target_speed)
+    #                     actor.addVehicle = True
+    #                     if id != actor.id:
+    #                         print('create_actor:', id, actor.id)
+    #                     break
+
+
+    #             # if actor.id > 100:
+    #             #     if old_id in PanoSimDataProvider._actor_pool:
+    #             #         PanoSimDataProvider._actor_pool[actor.id] = PanoSimDataProvider._actor_pool.pop(old_id)
+    #             #     else:
+    #             #         PanoSimDataProvider._actor_pool[actor.id] = actor
+    #             #     if actor in PanoSimDataProvider._actor_location_map:
+    #             #         PanoSimDataProvider._actor_location_map[actor] = actor.transform.location
+    #             #     if actor in PanoSimDataProvider._actor_transform_map:
+    #             #         PanoSimDataProvider._actor_location_map[actor] = actor.transform
+
+    #             # old_id = actor.id
+    #             # if actor.actor_category == 'bicycle':
+    #             #     type = vehicle_type.NonMotorVehicle
+    #             # elif actor.actor_category == 'pedestrian':
+    #             #     type = vehicle_type.Pedestrian
+    #             # if actor.transform.type == 'WorldPosition':
+    #             #     x = actor.transform.location.x
+    #             #     y = actor.transform.location.y
+    #             #     actor.id = addVehicle(x, y, 0, type)
+    #             #     print('addVehicle:', x, y, 0, type)
+    #             #     if actor.id > 100 and (type == vehicle_type.NonMotorVehicle or type == vehicle_type.Pedestrian):
+    #             #         moveTo(actor.id, x, y, 90 - actor.transform.rotation.yaw)
+    #             # elif actor.transform.type == 'RelativeRoadPosition':
+    #             #     ds = actor.transform.data['ds']
+    #             #     # dt = actor.transform.data['dt']
+    #             #     ref = actor.transform.data['entityRef']
+    #             #     Relative = actor.transform.data['Relative']
+    #             #     Relative = Relative.data
+    #             #     # roadId = Relative['roadId']
+    #             #     # s = Relative['s']
+    #             #     # t = Relative['t']
+    #             #     if ref == 'hero':
+    #             #         actor.id = addVehicleRelated(0, float(ds), 0, 0, lane_type.current, type)
+    #             #         print('addVehicleRelated1:', 0, float(ds), 0, 0, lane_type.current, type)
+    #             #     else:
+    #             #         for k, v in PanoSimDataProvider._actor_pool.items():
+    #             #             if v.attributes['role_name'] == ref and k > 100:
+    #             #                 actor.id = addVehicleRelated(k, float(ds), 0, 0, lane_type.current, type)
+    #             #                 print('addVehicleRelated2:', k, float(ds), 0, 0, lane_type.current, type)
+    #             #                 break
+    #             # elif actor.transform.type == 'RoadPosition':
+    #             #     print('create_actor:', actor.id, actor.transform.type, actor.transform.data)
+    #             # elif actor.transform.type == 'LanePostion':
+    #             #     print('create_actor:', actor.id, actor.transform.type, actor.transform.data)
+    #             # if actor.id > 100:
+    #             #     if old_id in PanoSimDataProvider._actor_pool:
+    #             #         PanoSimDataProvider._actor_pool[actor.id] = PanoSimDataProvider._actor_pool.pop(old_id)
+    #             #     else:
+    #             #         PanoSimDataProvider._actor_pool[actor.id] = actor
+    #             #     if actor in PanoSimDataProvider._actor_location_map:
+    #             #         PanoSimDataProvider._actor_location_map[actor] = actor.transform.location
+    #             #     if actor in PanoSimDataProvider._actor_transform_map:
+    #             #         PanoSimDataProvider._actor_location_map[actor] = actor.transform
