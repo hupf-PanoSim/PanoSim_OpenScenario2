@@ -41,6 +41,7 @@ from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (
     PanoSimActorTransformSetter,
     PanoSimChangeSpeed,
     PanoSimChangeLane,
+    PanoSimVehicleAcceleration,
     ChangeTargetSpeed,
     LaneChange,
     UniformAcceleration,
@@ -169,8 +170,9 @@ def process_speed_modifier(config, modifiers, duration: float, all_duration: flo
             accelerate_speed = modifier.get_accelerate().gen_physical_value()
             target_velocity = current_car_speed + accelerate_speed * duration
             actor = PanoSimDataProvider.get_actor_by_name(actor_name)
-            start_time = all_duration - duration
-            uniform_accelerate_speed = UniformAcceleration(actor, current_car_speed, target_velocity, accelerate_speed, start_time)
+            # start_time = all_duration - duration
+            # uniform_accelerate_speed = UniformAcceleration(actor, current_car_speed, target_velocity, accelerate_speed, start_time)
+            uniform_accelerate_speed = PanoSimVehicleAcceleration(actor, current_car_speed, target_velocity, accelerate_speed)
             print("END ACCELERATION")
             car_driving = WaypointFollower(actor)
 

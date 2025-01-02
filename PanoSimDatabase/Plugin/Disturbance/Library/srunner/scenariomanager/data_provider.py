@@ -474,6 +474,7 @@ class PanoSimActor:
         self.is_alive = True
         self.bounding_box = PanoSimBoundingBox()
         self.addVehicle = False
+        self.speed_changing = False
 
     def get_transform(self):
         if self.actor_category == 'bicycle' or self.actor_category == 'pedestrian':
@@ -508,11 +509,16 @@ class PanoSimActor:
     def set_autopilot(self, autopilot=True, port=8000):
         pass
 
+    def apply_control(self, ctrl):
+        pass
+
     def stop(self):
-        print('stop: id=', self.id)
+        print('stop: id=%d' % self.id)
 
     def destroy(self):
-        print('destroy: id=', self.id)
+        print('destroy: id=%d' % self.id)
+        if self.id in getVehicleList():
+            deleteVehicle(self.id)
         del self
 
     def set_target_velocity(self, velocity):
@@ -798,7 +804,7 @@ class PanoSimDataProvider(object):
                 if actor is not None and actor.is_alive:
                     if actor.id > 100:
                         speed = actor.speed
-                        if abs(speed - getVehicleSpeed(actor.id)) > 0.1:
+                        if abs(speed - getVehicleSpeed(actor.id)) > 0.1 and not actor.speed_changing:
                             changeSpeed(actor.id, speed, 0)
                     elif actor.id == 0:
                         speed = getVehicleSpeed(actor.id)

@@ -82,7 +82,8 @@ def get_actor_control(actor):
     Method to return the type of control to the actor.
     """
     control = actor.get_control()
-    actor_type = actor.type_id.split('.')[0]
+    # actor_type = actor.type_id.split('.')[0]
+    actor_type = actor.model.split('.')[0]
     if not isinstance(actor, PanoSimWalker):
         control.steering = 0
     else:
@@ -1570,6 +1571,43 @@ class AccelerateToVelocity(AtomicBehavior):
                 self._control.throttle = 0
 
         self._actor.apply_control(self._control)
+        self.logger.debug("%s.update()[%s->%s]" % (self.__class__.__name__, self.status, new_status))
+
+        return new_status
+
+
+class PanoSimVehicleAcceleration(AtomicBehavior):
+    OFFSET_THRESHOLD = 0.1
+
+    def __init__(self, actor, start_velocity, target_velocity, acceleration, name="Acceleration"):
+        """
+        Setup parameters including acceleration value (via throttle_value),
+        start_velocity, target velocity and duration
+        """
+        self._control, self._type = get_actor_control(actor)
+        super(PanoSimVehicleAcceleration, self).__init__(name, actor)
+        self._start_velocity = start_velocity
+        self._acceleration = acceleration
+        self._target_velocity = target_velocity
+
+    def initialise(self):
+        super(PanoSimVehicleAcceleration, self).initialise()
+
+    def update(self):
+        """
+        Set throttle to control acceleration to a fixed value , as long as velocity is < target_velocity
+        """
+        new_status = py_trees.common.Status.RUNNING
+
+        current_speed = getVehicleSpeed(self._actor.id)
+        duration = abs(self._target_velocity - current_speed) / self._acceleration
+        if not self._actor.speed_changing:
+            self._actor.speed_changing = True
+            changeSpeed(self._actor.id, self._target_velocity, duration)
+        else:
+            if abs(self._target_velocity - current_speed) < self.OFFSET_THRESHOLD:
+                self._actor.speed_changing = False
+                new_status = py_trees.common.Status.SUCCESS
         self.logger.debug("%s.update()[%s->%s]" % (self.__class__.__name__, self.status, new_status))
 
         return new_status
