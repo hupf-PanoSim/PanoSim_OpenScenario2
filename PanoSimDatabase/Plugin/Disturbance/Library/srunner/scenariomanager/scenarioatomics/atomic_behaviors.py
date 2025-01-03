@@ -2726,8 +2726,8 @@ class PanoSimChangeSpeed(AtomicBehavior):
         super(PanoSimChangeSpeed, self).initialise()
 
         if self._target_speed > 0:
-            # print('PanoSimChangeSpeed:', self._actor.speed, self._target_speed)
             self._actor.speed = self._target_speed
+            # print('PanoSimChangeSpeed1:', self._target_speed)
         else:
             ego_lane_id = getVehicleLane(0)
             ego_line = geometry.LineString(getLaneShape(ego_lane_id))
@@ -2743,6 +2743,7 @@ class PanoSimChangeSpeed(AtomicBehavior):
                 current = ops.substring(line, start, getLaneLength(lane_id) - start).project(geometry.Point(ego_last_x, ego_last_y))
                 current += self._end_offset
                 self._actor.speed = current / self._duration
+                # print('PanoSimChangeSpeed2:', self._actor.speed)
 
     def update(self):
         return py_trees.common.Status.RUNNING
@@ -2763,14 +2764,22 @@ class PanoSimChangeLane(AtomicBehavior):
         id = self._actor.id
         if id > 0:
             ego_lane = getVehicleLane(0)
+            lane = getVehicleLane(id)
             if self._location == 'left_of':
                 self._target_lane = getLeftLane(ego_lane)
             elif self._location == 'right_of':
                 self._target_lane = getRightLane(ego_lane)
             elif self._location == 'same_as':
                 self._target_lane = ego_lane
+            elif self._location == 'left':
+                self._target_lane = getLeftLane(lane)
+                changeLane(id, change_lane_direction.left, self._duration)
+                return
+            elif self._location == 'right':
+                self._target_lane = getRightLane(lane)
+                changeLane(id, change_lane_direction.right, self._duration)
+                return
 
-            lane = getVehicleLane(id)
             if getLeftLane(lane) == self._target_lane:
                 changeLane(id, change_lane_direction.left, self._duration)
             elif getRightLane(lane) == self._target_lane:

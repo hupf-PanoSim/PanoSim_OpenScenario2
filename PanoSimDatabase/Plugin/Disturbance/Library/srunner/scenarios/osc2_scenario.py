@@ -138,6 +138,7 @@ def process_speed_modifier(config, modifiers, duration: float, all_duration: flo
             actor = PanoSimDataProvider.get_actor_by_name(actor_name)
             if actor_name != 'ego_vehicle':
                 change_speed = PanoSimChangeSpeed(actor, actor_name, target_speed, duration)
+                # print('PanoSimChangeSpeed:', actor, actor_name, target_speed, duration)
                 father_tree.add_child(change_speed)
                 # car_driving = WaypointFollower(actor, target_speed)
                 # father_tree.add_child(car_driving)
@@ -200,14 +201,16 @@ def process_location_modifier(config, modifiers, duration: float, father_tree):
         if isinstance(modifier, ChangeLaneModifier):
             lane_changes = modifier.get_lane_changes()
             av_side = modifier.get_side()
-            print(f"The car changes lanes to the {av_side} for {lane_changes} lanes.")
+            # print(f"The car changes lanes to the {av_side} for {lane_changes} lanes.")
             npc_name = modifier.get_actor_name()
             actor = PanoSimDataProvider.get_actor_by_name(npc_name)
-            lane_change = LaneChange(actor, speed=None, direction=av_side, lane_changes=lane_changes)
-            continue_drive = WaypointFollower(actor)
+            lane_change = PanoSimChangeLane(actor, duration, av_side)
+            # print('PanoSimChangeLane:', actor.id, duration, av_side)
+            # lane_change = LaneChange(actor, speed=None, direction=av_side, lane_changes=lane_changes)
+            # continue_drive = WaypointFollower(actor)
             father_tree.add_child(lane_change)
-            father_tree.add_child(continue_drive)
-            print("END of change lane--")
+            # father_tree.add_child(continue_drive)
+            # print("END of change lane--")
             return
 
     event_start = [
