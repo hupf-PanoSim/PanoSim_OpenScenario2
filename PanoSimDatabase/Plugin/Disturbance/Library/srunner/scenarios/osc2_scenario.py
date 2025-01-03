@@ -42,9 +42,10 @@ from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (
     PanoSimChangeSpeed,
     PanoSimChangeLane,
     PanoSimVehicleAcceleration,
-    ChangeTargetSpeed,
-    LaneChange,
-    UniformAcceleration,
+    PanoSimDrive,
+    # ChangeTargetSpeed,
+    # LaneChange,
+    # UniformAcceleration,
     WaypointFollower,
     calculate_distance,
 )
@@ -158,13 +159,14 @@ def process_speed_modifier(config, modifiers, duration: float, all_duration: flo
             LOG_WARNING(f"{actor_name} car speed will be changed to {target_speed} km/h")
 
             actor = PanoSimDataProvider.get_actor_by_name(actor_name)
-            change_speed = ChangeTargetSpeed(actor, target_speed)
-
-            car_driving = WaypointFollower(actor)
+            # change_speed = ChangeTargetSpeed(actor, target_speed)
+            if actor_name != 'ego_vehicle':
+                change_speed = PanoSimChangeSpeed(actor, actor_name, target_speed, duration)
+                print('PanoSimChangeSpeed:', actor, actor_name, target_speed, duration)
+            # car_driving = WaypointFollower(actor)
             # car_driving.set_duration(duration)
-
-            father_tree.add_child(change_speed)
-            father_tree.add_child(car_driving)
+                father_tree.add_child(change_speed)
+            # father_tree.add_child(car_driving)
         elif isinstance(modifier, AccelerationModifier):
             current_car_conf = config.get_car_config(actor_name)
             current_car_speed = current_car_conf.get_arg("target_speed")
@@ -694,7 +696,8 @@ class OSC2Scenario(BasicScenario):
             if modifier_invocation_no_occur:
                 if actor != 'ego_vehicle':
                     car_actor = PanoSimDataProvider.get_actor_by_name(actor)
-                    car_driving = WaypointFollower(car_actor)
+                    # car_driving = WaypointFollower(car_actor)
+                    car_driving = PanoSimDrive(car_actor)
                     actor_drive.add_child(car_driving)
                     behavior.add_child(actor_drive)
                     self.__cur_behavior.add_child(behavior)

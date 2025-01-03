@@ -2726,8 +2726,10 @@ class PanoSimChangeSpeed(AtomicBehavior):
         super(PanoSimChangeSpeed, self).initialise()
 
         if self._target_speed > 0:
-            self._actor.speed = self._target_speed
-            # print('PanoSimChangeSpeed1:', self._target_speed)
+            # self._actor.speed = self._target_speed
+            print('PanoSimChangeSpeed:', self._actor.id, getVehicleSpeed(self._actor.id), self._target_speed, self._duration)
+            changeSpeed(self._actor.id, self._target_speed, self._duration)
+            self._actor.speed_changing = True
         else:
             ego_lane_id = getVehicleLane(0)
             ego_line = geometry.LineString(getLaneShape(ego_lane_id))
@@ -2746,7 +2748,13 @@ class PanoSimChangeSpeed(AtomicBehavior):
                 # print('PanoSimChangeSpeed2:', self._actor.speed)
 
     def update(self):
-        return py_trees.common.Status.RUNNING
+        new_status = py_trees.common.Status.RUNNING
+        if self._actor.speed_changing:
+            current_speed = getVehicleSpeed(self._actor.id)
+            if abs(self._target_speed - current_speed) < 0.1:
+                self._actor.speed_changing = False
+                new_status = py_trees.common.Status.SUCCESS
+        return new_status
 
     def terminate(self, new_status):
         super(PanoSimChangeSpeed, self).terminate(new_status)
@@ -2791,6 +2799,17 @@ class PanoSimChangeLane(AtomicBehavior):
         #     if getVehicleLane(id) == self._target_lane:
         #         return py_trees.common.Status.SUCCESS
 
+        return py_trees.common.Status.RUNNING
+
+
+class PanoSimDrive(AtomicBehavior):
+    def __init__(self, actor, name="PanoSimDrive"):
+        super(PanoSimDrive, self).__init__(name, actor)
+
+    def initialise(self):
+        super(PanoSimDrive, self).initialise()
+
+    def update(self):
         return py_trees.common.Status.RUNNING
 
 
