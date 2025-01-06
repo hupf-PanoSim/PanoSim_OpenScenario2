@@ -805,6 +805,7 @@ class PanoSimDataProvider(object):
                     if actor.id > 100:
                         speed = actor.speed
                         if abs(speed - getVehicleSpeed(actor.id)) > 0.1 and not actor.speed_changing:
+                            # print('changeSpeed:', actor.id, getVehicleSpeed(actor.id), speed, 0)
                             changeSpeed(actor.id, speed, 0)
                     elif actor.id == 0:
                         speed = getVehicleSpeed(actor.id)

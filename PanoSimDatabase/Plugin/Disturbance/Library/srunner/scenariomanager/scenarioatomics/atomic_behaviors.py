@@ -2727,7 +2727,7 @@ class PanoSimChangeSpeed(AtomicBehavior):
 
         if self._target_speed > 0:
             # self._actor.speed = self._target_speed
-            # print('PanoSimChangeSpeed:', self._actor.id, getVehicleSpeed(self._actor.id), self._target_speed, self._duration)
+            # print('PanoSimChangeSpeed1:', self._actor.id, getVehicleSpeed(self._actor.id), self._target_speed, self._duration)
             changeSpeed(self._actor.id, self._target_speed, self._duration)
             self._actor.speed_changing = True
         else:

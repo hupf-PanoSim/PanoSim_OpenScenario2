@@ -650,11 +650,13 @@ class OSC2Scenario(BasicScenario):
 
                     elif modifier_name == "keep_lane":
                         actor_object = PanoSimDataProvider.get_actor_by_name(actor)
-                        car_driving = WaypointFollower(actor_object)
-                        actor_drive.add_child(car_driving)
-                        behavior.add_child(actor_drive)
-                        # self.__cur_behavior.add_child(behavior)
-                        print("Target keep lane.")
+                        # car_driving = WaypointFollower(actor_object)
+                        if actor_object.id > 100:
+                            car_driving = PanoSimDrive(actor_object)
+                            actor_drive.add_child(car_driving)
+                            behavior.add_child(actor_drive)
+                            # self.__cur_behavior.add_child(behavior)
+                            print("Target keep lane.")
 
                     elif modifier_name == "change_speed":
                         # change_speed([speed: ]<speed>)
