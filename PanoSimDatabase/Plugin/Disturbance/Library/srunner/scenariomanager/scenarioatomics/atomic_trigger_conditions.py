@@ -146,10 +146,10 @@ class InTriggerNearCollision(AtomicCondition):
         if self._comparison_operator(calculate_distance(location, reference_location), self._distance):
             new_status = py_trees.common.Status.SUCCESS
             print("Too close, collision!")
-            self._control.throttle = 0
-            self._control.brake = 1
+            # self._control.throttle = 0
+            # self._control.brake = 1
             print('decelerate!!!')
-            self._reference_actor.apply_control(self._control)
+            # self._reference_actor.apply_control(self._control)
         self.logger.debug("%s.update()[%s->%s]" % (self.__class__.__name__, self.status, new_status))
 
         return new_status

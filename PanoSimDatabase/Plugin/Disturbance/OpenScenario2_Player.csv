@@ -1,2 +1,2 @@
 Name,DisplayName,Type,Default,Group,SubGroup,Tips,Include,Exclude,Switch,Visible
-scenario,Scenario,cut_in_and_slow_right/acceleration/change_lane/change_speed/cut_in_and_slow_range/cut_in_and_slow_single_over_junction/emit/keep_lane/method_invocation/one_of/overtake_concrete/overtake1/wait,cut_in_and_slow_right,,,,,,,
+scenario,Scenario,cut_in_and_slow_right/acceleration/change_lane/change_speed/cut_in_and_slow_range/cut_in_and_slow_single_over_junction/emit/keep_lane/method_invocation/wait,cut_in_and_slow_right,,,,,,,

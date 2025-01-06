@@ -296,6 +296,8 @@ class OSC2Scenario(BasicScenario):
         Setup all relevant parameters and create scenario
         """
         self.config = config
+        # added by hupf, for 'near_collision'
+        self.event = config.event
         self.route = None
         self.osc2_file = osc2_file
         self.ast_tree = OSC2Helper.gen_osc2_ast(self.osc2_file)

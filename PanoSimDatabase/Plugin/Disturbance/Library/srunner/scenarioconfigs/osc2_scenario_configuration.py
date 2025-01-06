@@ -27,6 +27,9 @@ from srunner.scenariomanager.data_provider import PanoSimDataProvider, PanoSimWe
 # OSC2
 from srunner.tools.osc2_helper import OSC2Helper
 
+# added by hupf, for 'near_collision'
+from srunner.osc2_stdlib.event import Event
+
 vehicle_type = ["Car", "Model3", "Mkz2017", "Carlacola", "Rubicon"]
 
 
@@ -60,6 +63,9 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
 
         self.scenario_declaration = {}
         self.struct_declaration = {}
+
+        # added by hupf, for 'near_collision'
+        self.event = Event()
 
         self._parse_osc2_configuration()
 
@@ -128,8 +134,9 @@ class OSC2ScenarioConfiguration(ScenarioConfiguration):
                 elif isinstance(child, ast_node.VariableDeclaration):
                     self.visit_variable_declaration(child)
                 elif isinstance(child, ast_node.EventDeclaration):
-                    pass
-                    # self.visit_event_declaration(child)
+                    # modified by hupf, for 'near_collision'
+                    # pass
+                    self.visit_event_declaration(child)
                 elif isinstance(child, ast_node.DoDirective):
                     self.visit_do_directive(child)
 
