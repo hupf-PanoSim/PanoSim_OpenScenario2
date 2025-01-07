@@ -138,7 +138,7 @@ def process_speed_modifier(config, modifiers, duration: float, all_duration: flo
             target_speed = modifier.get_speed().gen_physical_value()
             actor = PanoSimDataProvider.get_actor_by_name(actor_name)
             if actor_name != 'ego_vehicle':
-                change_speed = PanoSimChangeSpeed(actor, actor_name, target_speed, 0)
+                change_speed = PanoSimChangeSpeed(actor, actor_name, target_speed, duration)
                 # print('PanoSimChangeSpeed:', actor, actor_name, target_speed, duration)
                 father_tree.add_child(change_speed)
                 # car_driving = WaypointFollower(actor, target_speed)
