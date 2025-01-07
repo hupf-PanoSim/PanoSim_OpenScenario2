@@ -2725,7 +2725,9 @@ class PanoSimChangeSpeed(AtomicBehavior):
     def initialise(self):
         super(PanoSimChangeSpeed, self).initialise()
 
-        if self._target_speed > 0:
+        if self._target_speed == 0:
+            self._actor.speed = 0
+        elif self._target_speed > 0:
             # self._actor.speed = self._target_speed
             # print('PanoSimChangeSpeed1:', self._actor.id, getVehicleSpeed(self._actor.id), self._target_speed, self._duration)
             changeSpeed(self._actor.id, self._target_speed, self._duration)
@@ -2748,13 +2750,12 @@ class PanoSimChangeSpeed(AtomicBehavior):
                 # print('PanoSimChangeSpeed2:', self._actor.speed)
 
     def update(self):
-        new_status = py_trees.common.Status.RUNNING
         if self._actor.speed_changing:
             current_speed = getVehicleSpeed(self._actor.id)
             if abs(self._target_speed - current_speed) < 0.1:
                 self._actor.speed_changing = False
-                new_status = py_trees.common.Status.SUCCESS
-        return new_status
+                return py_trees.common.Status.SUCCESS
+        return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status):
         super(PanoSimChangeSpeed, self).terminate(new_status)
