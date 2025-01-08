@@ -50,4 +50,5 @@ Follow these steps to set up the run environment and install the package:
 
 ## License
 
-The software is double-licensed under the MIT license, with copyright by 3blue1brown LLC (see LICENSE), and copyright by Manim Community Developers (see LICENSE.community).
+The software is licensed under the MIT License - see [`LICENSE`](./LICENSE.txt) for more details.
+
